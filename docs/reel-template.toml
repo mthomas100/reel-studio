@@ -1,0 +1,77 @@
+# <Title> — <one line: what this reel is>. A full worked example: projects/too-much/reel.toml.
+# Every key below is read by bin/reel. Times are seconds on the reel's own clock.
+
+title = "<Title>"
+width = 704              # 9:16; LTX-2.5 needs multiples of 32 (704x1280)
+height = 1280
+fps = 24
+seed = 1234              # one seed per reel; takes and shots offset from it
+language = "english"     # the voice track: english, russian, german, french, spanish, italian, portuguese, japanese, korean, chinese
+# reference = "~/path/to/reference.mp4"   # a reference you are studying: `reel cut --compare` puts it side by side (private use)
+
+[control]                # who decides (README "Who decides"); the human can switch modes any time
+mode = "checkpoints"          # drive = the agent decides everything and reports at the end; checkpoints = it stops at the gates; hands-on = the human picks at every stage
+# gates = ["cast", "stills", "animatic", "cut"]   # override which stages stop for the human
+
+[narrator]
+voice = "<age, timbre, pitch, pace, accent, attitude — e.g. an old man with a very deep slow bass storyteller voice>"
+
+[look]
+# Appended to EVERY still prompt, so never repeat it in a shot. Concrete choices, no lens or format words.
+image = "Photorealistic still from a lavish live-action <genre> feature film, <setting>, <light>, <palette>, shallow depth of field, real actors with natural skin texture, rich fabric detail, cinematic colour, a clean full-frame image."
+# Appended to every motion prompt: short.
+video = "Photorealistic live-action period film, natural human motion, steady camera."
+
+# 2-4 candidate looks for the intake (reel looktest renders one frame each; reel pick <p> look <id> chooses).
+# The picked option replaces [look] in every prompt. One safe, one bolder, one unexpected.
+[[look_option]]
+id = "<slug>"
+name = "<two or three words>"
+image = "<a full style sentence, like [look] image>"
+video = "<a short motion style sentence>"
+
+# look_test = "<what the look-test frame shows; default: the first set plus the first cast sentence>"
+
+[music]
+prompt = "<style, instruments, tempo in bpm, key, instrumental>"
+seconds = 62
+gain_db = -17            # under the narrator
+# file = "~/Music/bed.wav"   # use your own bed instead of generating one
+
+[[cast]]                 # one per recurring person or creature
+id = "<slug>"
+sentence = "<Name>, a <man/woman> of about <N>, <hair>, <face>, <one mark or accessory>, <costume with colours>"
+voice = "<age, timbre, pitch, pace, how they shout>"   # used by every [[narration]] line with who = this id
+portrait = "Photorealistic full-length character reference portrait of <who> standing facing the camera, the whole figure from head to shoes in frame, soft even light, a plain warm grey studio backdrop. <the sentence again, plus pose and expression>."
+
+[[set]]                  # one per location: an EMPTY plate, image 1 of every edit
+id = "<slug>"
+prompt = "Photorealistic interior of <place> in the <time of day>, seen <from where>: <architecture, materials, light sources, floor, what is in it>."
+
+[[shot]]
+n = 1
+dur = 2.0                # seconds in the final cut (a reference's shot length, when you model the rhythm on one)
+set = "<set id>"
+cast = ["<cast id>"]     # [] for an insert with no recurring person (text-to-image)
+still = "<framing first: Medium close-up, eye level, symmetrical:> <who by first name> <pose, expression in physical terms>, <props and their scale in people>, <the set's light>."
+motion = "<one action and one camera move, 1-2 sentences>"
+audio = "duck"           # keep (the take's own sound effects) | duck (under the narrator) | mute
+sound = "<what the take should sound like>"
+# in = 0.4               # in-point inside the take (default config.toml [video] in)
+# secs = 4               # take length (default in + dur + 0.5, at least 3)
+
+[[narration]]            # the narrator, and any short line (give it its own voice)
+start = 0.0
+text = "<the line>"
+delivery = "<how it is said>"
+# text_ru = "<the line in Russian>"      # spoken instead of text when language = "russian"
+# who = "<cast id>"      # a character's line: spoken in that [[cast]] voice (one voice per character, changed in one place)
+
+[[overlay]]              # burned-in titles; never prompt text into an image
+text = "<LINE ONE\nLINE TWO>"
+start = 0.1
+end = 3.0
+typewriter = 0.9         # optional: seconds for the letters to type on
+y = 0.6                  # vertical position as a fraction of the height
+size = 34
+font = "/System/Library/Fonts/Supplemental/Cochin.ttc"

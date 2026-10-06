@@ -1,0 +1,556 @@
+# Too Much Is Never Enough — a spoiled-princess fairy-tale comedy reel from the human's own screenplay
+# (projects/too-much/screenplay.md). Drive mode, start to finish, no re-shoots this round (kickoff.md).
+# Times are the reel's own clock. Where the screenplay gave one shot more than one take can hold (shot 32's
+# rapid payoff), it is split into consecutive shots 32-38; see NOTES.md.
+
+title = "Too Much Is Never Enough"
+width = 704
+height = 1280
+fps = 24
+seed = 7777
+language = "english"
+
+[control]
+mode = "drive"     # the human handed the whole reel over (kickoff.md, 2026-10-05); no gates
+
+[narrator]
+voice = "A man of about sixty with a dry crisp British RP voice, low and measured, perfectly deadpan and faintly sarcastic, every sentence delivered like a raised eyebrow"
+
+[look]
+image = "Photorealistic still from a lavish live-action fairy-tale feature film, an elegant pale silver and ivory palace with restrained crystal details, tall arched windows, polished pale marble floors, sculptural silver furniture and ruby-red accents, soft candlelight mixed with cool window light, generous negative space, shallow depth of field, real actors with natural skin texture, rich fabric detail, cinematic colour, a clean full-frame image."
+video = "Photorealistic live-action fairy-tale film, natural human motion, steady camera."
+
+[music]
+prompt = "light mischievous orchestral comedy, lead pizzicato strings, small celesta flourishes, restrained woodwind punctuation, never cartoony, a brief drop to sparse ominous low strings for a witch entrance then straight back to dry pizzicato, an absurdly romantic miniature fanfare for a prince, a brief musical stop and one beat of silence, then a celebratory burst of laughing strings, ending on a light pizzicato flourish, 116 bpm, D major, instrumental, no vocals"
+seconds = 116
+gain_db = -17
+
+# ---------------------------------------------------------------- cast (one fixed sentence each; maids and servants are extras, never cast)
+
+[[cast]]
+id = "zlata"
+voice = "A young woman of about twenty with a low, slightly bored, modern and dry voice, a permanent sulky drawl, capable of sudden short dramatic outbursts but mostly flat"
+sentence = "Princess Zlata, a pale young Slavic princess of about twenty, very long thick curly blonde hair falling past her shoulders, long lashes, naturally red pouty lips and a small beauty mark beside her mouth, a tall crystal kokoshnik set with ruby, emerald and diamond stones, enormous black velvet puff sleeves over a sophisticated layered white embroidered gown with ruby-red accents, full structured skirts and luxurious fairy-tale detailing"
+portrait = "Photorealistic full-length character reference portrait of a princess standing facing the camera, the whole figure from the top of her headdress to her shoes in frame, soft even light, a plain warm grey studio backdrop. Princess Zlata, a pale young Slavic princess of about twenty, very long thick curly blonde hair falling past her shoulders, long lashes, naturally red pouty lips, a small beauty mark beside her mouth, a magnificent bored pout on her face. She wears a tall crystal kokoshnik set with ruby, emerald and diamond stones, enormous black velvet puff sleeves, a sophisticated layered white embroidered gown with ruby-red accents and full structured skirts to the floor, ivory heeled shoes. Her arms are crossed tightly."
+
+[[cast]]
+id = "tsarina"
+voice = "A woman of about forty-five with a warm elegant slightly breathy voice, refined, tired and indulgent, always a little strained at the end of a sentence, coaxing and pleading"
+sentence = "The Tsarina, a regal woman of about forty-five, visibly an older version of the princess, curly blonde hair beginning to gray, fine wrinkles and tired eyes, an elegant exhausted face, an oversized queen's crown, an elegant black-and-white royal gown with restrained ruby-red accents"
+portrait = "Photorealistic full-length character reference portrait of a queen standing facing the camera, the whole figure from the top of her crown to her shoes in frame, soft even light, a plain warm grey studio backdrop. The Tsarina, a regal woman of about forty-five, visibly an older version of the princess, curly blonde hair beginning to gray, fine wrinkles, tired eyes, an elegant face worn anxious and exhausted. She wears an oversized gold queen's crown set with ruby stones, an elegant floor-length black-and-white royal gown with restrained ruby-red accents and white lace cuffs, black heeled shoes. Her hands are folded at her waist."
+
+[[cast]]
+id = "witch"
+voice = "A very old woman with a low, raspy, conversational voice, dry and world-weary, completely unimpressed by royalty"
+sentence = "The witch, a very old woman with the unsettling presence of a fairy-tale Baba Yaga, a deeply lined face under a dark headscarf, layered muted grandmother's dress, heavy stockings and sturdy shoes, strange old rings and small eerie talismans sewn into her clothes, a crooked wooden cane"
+portrait = "Photorealistic full-length character reference portrait of a very old woman standing facing the camera, the whole figure from her headscarf to her shoes in frame, soft even light, a plain warm grey studio backdrop. The witch, a very old woman with the unsettling presence of a fairy-tale Baba Yaga, a deeply lined face, pale small eyes, thin lips, a dark headscarf tied under her chin, a layered muted olive-and-brown grandmother's dress to her ankles, heavy stockings, sturdy black shoes, strange old rings on her fingers, small eerie talismans sewn into her sleeves. She leans on a crooked wooden cane. She looks completely unimpressed."
+
+[[cast]]
+id = "narsissus"
+voice = "A young man of about twenty-five with a smooth, rich, confident voice, deeply pleased with himself, purring with charm"
+sentence = "Prince Narsissus, a tall man of about twenty-five, neat blond hair, bright blue eyes, almost offensively handsome, an elegant fitted velvet court suit with embroidered details, a high collar and tall polished boots"
+portrait = "Photorealistic full-length character reference portrait of a young prince standing facing the camera, the whole figure from his hair to his boots in frame, soft even light, a plain warm grey studio backdrop. Prince Narsissus, a tall man of about twenty-five, neat blond hair, bright blue eyes, almost offensively handsome, a self-satisfied smile. He wears an elegant fitted deep-blue velvet court suit with gold embroidered details and a high collar, white gloves, tall polished black boots. One hand rests on his hip, chest out, as though his arrival is a gift to the room."
+
+# ---------------------------------------------------------------- sets (empty plates)
+
+[[set]]
+id = "throne"
+prompt = "Photorealistic interior of an airy fairy-tale throne room in pale silver and ivory, seen straight on: an elegant silver throne with a tall arched crystal back at the centre on a low dais, tall arched windows along both sides, restrained crystal chandeliers, a polished pale marble floor, sparse silver candelabra, ruby-red velvet cushion and drapery accents, a tall shadowed doorway leading into near-blackness at the far right edge, soft candlelight mixed with cool window light, expensive but never cluttered, generous negative space."
+
+[[set]]
+id = "gallery"
+prompt = "Photorealistic interior of a long symmetrical palace gallery, a deep view straight down its length: silver-and-ivory walls, tall arched windows along both sides, a polished pale marble floor, occasional ruby-red curtains, restrained crystal chandeliers, soft candlelight mixed with cool window light."
+
+[[set]]
+id = "door"
+prompt = "Photorealistic interior of the far end of a pale silver fairy-tale throne room seen straight on: a single tall arched doorway framed in pale stone leading into near-blackness, polished pale marble floor in the foreground, faint ruby-red accents at the edges, cold dim light around the dark opening."
+
+# ---------------------------------------------------------------- shots
+# The screenplay's shot 32 (a rapid payoff sequence with cuts inside it) is split into shots 32-38; shot 6 is
+# lengthened so the two narrator sentences and the Tsarina's line fit without overlap. Timings: NOTES.md.
+
+[[shot]]
+n = 1
+dur = 3.5
+cast = []
+still = "Title card: a near-black background with a faint ruby-red ornamental fairy-tale border of thin curling vine scrolls and tiny crystals around the edges, generous empty darkness in the centre, no people, no text, no letters."
+motion = "Nothing moves except a very slow candle-like shimmer deepening in the darkness."
+audio = "mute"
+
+[[shot]]
+n = 2
+dur = 4.2
+set = "throne"
+cast = ["zlata"]
+still = "Medium shot, eye level, perfectly symmetrical, from just above her kokoshnik to her lap: Zlata sits dead centre on the silver throne with her arms crossed tightly, chin slightly lowered, staring directly into the camera with magnificent boredom, her enormous white embroidered skirt filling the lower frame, the ruby stones in her kokoshnik echoing the ruby-red accents of the room."
+motion = "Zlata slowly blinks once and exhales through her nose, arms still crossed. The camera pushes gently toward her."
+audio = "duck"
+sound = "a hushed grand hall, faint candle crackle"
+
+[[shot]]
+n = 3
+dur = 2.0
+set = "throne"
+cast = ["zlata"]
+still = "Tight frontal close-up from Zlata's kokoshnik band to her collarbones: her long lashes, naturally red pout and small beauty mark fill the frame, the crystal kokoshnik with its ruby and emerald stones across the top of the frame, pale silver and crystal bokeh soft behind her."
+motion = "Zlata glances sideways without moving her head, then back, utterly bored."
+audio = "mute"
+
+[[shot]]
+n = 4
+dur = 3.0
+set = "gallery"
+cast = []
+still = "Low symmetrical shot down the length of a long palace gallery: several palace maids in identical severe dusty-blue and ivory uniforms — simple dresses, structured collars, ivory aprons and matching head coverings — hurry past in opposite directions across the polished pale marble carrying jeweled boxes, flowers, folded dresses and silver trays, tall windows on both sides, cool window light mixed with candlelight."
+motion = "The maids cross the frame in opposite directions carrying their loads while the camera slowly tracks backward down the gallery."
+audio = "duck"
+sound = "quick footsteps on marble, silver and porcelain rattling"
+
+[[shot]]
+n = 5
+dur = 3.8
+set = "throne"
+cast = ["tsarina"]
+still = "Medium close-up, eye level: the Tsarina stands beside the silver throne, her oversized crown glittering, her face drawn and exhausted, glancing from a girl seated off to one side toward a procession of servants off to the other and closing her eyes for a moment; pale silver throne room and a ruby-red accent behind her."
+motion = "The Tsarina looks from one side to the other, closes her eyes and lowers her chin for one breath, then opens her eyes again, weary."
+audio = "mute"
+
+[[shot]]
+n = 6
+dur = 4.0
+set = "throne"
+cast = ["zlata", "tsarina"]
+still = "Two-shot, eye level, the throne's crystal back behind them: the Tsarina leans slightly toward Zlata, who sits on the silver throne with her arms crossed staring straight ahead; the Tsarina's hands are half raised in gentle pleading, Zlata's pout unchanged, both faces composed."
+motion = "The Tsarina leans closer and speaks one short gentle line, her mouth moving only while she speaks; Zlata stares straight ahead with her mouth closed and does not move."
+audio = "mute"
+
+[[shot]]
+n = 7
+dur = 3.0
+set = "throne"
+cast = []
+still = "Floor-level insert: tiny polished white hooves cross the pale marble in sharp focus, bright ruby-red ribbons bounce beside them, a jeweled miniature saddle catches the candlelight at the top of the frame, the background a soft blur of pale silver."
+motion = "The tiny hooves trot across the marble in a light rhythm, ribbons bouncing; the camera holds."
+audio = "keep"
+sound = "delicate hoof taps on marble"
+
+[[shot]]
+n = 8
+dur = 2.2
+set = "throne"
+cast = ["zlata", "tsarina"]
+still = "Wide symmetrical throne-room shot: two maids in dusty-blue and ivory uniforms lead a tiny real white pony covered with ruby-red ribbons and wearing an elaborate jeweled miniature saddle across the pale marble toward the throne; the Tsarina stands near the throne watching hopefully; Zlata sits dead centre on the throne, motionless, arms crossed."
+motion = "The maids lead the tiny pony forward between them; the Tsarina watches with her hands folded; Zlata does not move at all. The camera is locked off."
+audio = "duck"
+sound = "tiny hoof taps and a hushed room"
+
+[[shot]]
+n = 9
+dur = 3.4
+set = "throne"
+cast = ["zlata"]
+still = "Medium close-up of Zlata on the throne, her face turned toward a pony off to the side, eyes flat, lips pressed in her usual pout, the crystal kokoshnik catching the light, pale silver hall soft behind her."
+motion = "Zlata looks at the pony off to the side, pauses a beat, then dismisses it with a small roll of her eyes; her mouth moves for two short deadpan words and closes again."
+audio = "mute"
+
+[[shot]]
+n = 10
+dur = 2.2
+set = "throne"
+cast = []
+still = "Low shot: two maids in identical dusty-blue and ivory uniforms walk ceremoniously toward the silver throne carrying between them a ruby-red velvet cushion on which sit spectacular emerald gemstone high-heeled slippers; the polished pale marble reflects them, candlelight glinting on the gems."
+motion = "The two maids walk slowly and ceremoniously toward the throne holding the cushion level between them; the camera tracks backward before them."
+audio = "duck"
+sound = "slow footsteps, a faint gemstone glitter"
+
+[[shot]]
+n = 11
+dur = 3.3
+set = "throne"
+cast = ["zlata"]
+still = "Close insert from Zlata's knees downward: her white embroidered skirt with ruby-red accents over the pale marble; two maids in dusty-blue and ivory uniforms kneel at either side and place glittering emerald gemstone high-heeled slippers ceremoniously at her feet; the shoes sparkle against the pale marble."
+motion = "The two maids kneel and set the glittering emerald heels down at the princess's feet, then withdraw their hands."
+audio = "keep"
+sound = "a soft clink of gemstones on marble"
+
+[[shot]]
+n = 12
+dur = 2.6
+set = "throne"
+cast = ["zlata", "tsarina"]
+still = "Close-up: Zlata looks down at her feet, then slowly raises her eyes toward her mother; at the edge of the frame, soft and out of focus, the crowned face of the Tsarina holds a hopeful smile; pale silver throne room behind."
+motion = "Zlata lifts her gaze from her feet to her mother and speaks one sincere sentence with perfect deadpan seriousness; beside her the Tsarina's hopeful smile collapses."
+audio = "mute"
+
+[[shot]]
+n = 13
+dur = 3.5
+set = "throne"
+cast = ["zlata", "tsarina"]
+still = "Wide shot of the throne room: four maids in identical dusty-blue and ivory uniforms wheel in an enormous object hidden beneath a pale cloth, its shape unmistakably human — a head and shoulders at the top, a wide skirt below; the Tsarina gestures grandly toward it; Zlata on the throne leans slightly forward, mildly curious for the first time."
+motion = "The four maids push the huge shrouded object into the centre of the room; the Tsarina sweeps her arm toward it; Zlata leans a little forward on the throne."
+audio = "duck"
+sound = "wheels rolling on marble"
+
+[[shot]]
+n = 14
+dur = 2.0
+set = "throne"
+cast = []
+still = "Wide shot: two maids in dusty-blue and ivory uniforms at either side pull a pale cloth away in the air; revealed where the cloth stood is a life-size ice sculpture of a young princess with very long curly blonde hair frozen in an absurdly dramatic spoiled-princess pose, chin raised, one hand extended imperiously, enormous frozen skirts cascading around her onto the marble; candlelight refracts through the ice."
+motion = "The maids tear the cloth away in one pull and step back; the ice sculpture stands gleaming in the candlelight."
+audio = "keep"
+sound = "cloth whipping away and a heavy thud"
+
+[[shot]]
+n = 15
+dur = 3.0
+set = "throne"
+cast = ["zlata"]
+still = "Close-up of Zlata at a three-quarter angle, her eyes on a sculpture off to the side, her head still, her eyes travelling slowly upward and narrowing; cold ice-white reflections on her face, pale silver hall blurred behind."
+motion = "Zlata's eyes travel slowly up the sculpture off to the side and narrow; her mouth moves for one flat factual sentence."
+audio = "mute"
+
+[[shot]]
+n = 16
+dur = 3.2
+set = "door"
+cast = ["witch"]
+still = "Wide shot from behind a group of maids in dusty-blue and ivory uniforms, their backs to the camera, turning toward a tall dark arched doorway at the far end of the pale throne room; in the doorway stands a very old woman in a dark headscarf, silhouetted against the near-blackness behind her, leaning on a crooked wooden cane."
+motion = "The maids turn as one toward the doorway; the silhouetted old woman stands motionless, leaning on her crooked cane."
+audio = "mute"
+
+[[shot]]
+n = 17
+dur = 2.0
+set = "door"
+cast = []
+still = "Floor-level insert: a crooked wooden cane strikes the polished pale marble once, sharp in the frame, and a heavy old shoe in a thick stocking steps into a slice of light beside it, candlelight glinting on the stone, darkness behind."
+motion = "The cane strikes the marble once and the heavy shoe steps forward into the light."
+audio = "keep"
+sound = "a dry wooden tok on stone"
+
+[[shot]]
+n = 18
+dur = 2.6
+set = "throne"
+cast = ["witch"]
+still = "Medium shot, eye level: the witch walks into the throne room in her dark headscarf and strange old grandmother clothes — layered muted dress, heavy stockings, sturdy shoes, old rings and small talismans sewn into her sleeves — leaning on her crooked cane; the pale silver room and tall windows behind her."
+motion = "The witch walks slowly toward the camera, her cane tapping once per step, utterly unimpressed; the camera pushes in on her."
+audio = "duck"
+sound = "a cane tok and slow footsteps"
+
+[[shot]]
+n = 19
+dur = 5.0
+set = "throne"
+cast = ["witch"]
+still = "Close-up of the witch, her lined face in cool window light, her head tilted slightly toward a throne off to the side, her mouth closed and completely unimpressed, her dark headscarf framing her face, pale silver hall blurred behind."
+motion = "The witch looks at the princess off to one side, then at someone else off to the other side, and speaks two short dry sentences, her mouth moving only while she speaks."
+audio = "mute"
+
+[[shot]]
+n = 20
+dur = 2.0
+set = "throne"
+cast = ["zlata"]
+still = "Close-up of Zlata on the throne, chin slightly raised, eyes narrowed in mild offence, lips pushed out into an even bigger pout, the crystal kokoshnik above her, silver hall blurred behind."
+motion = "Zlata lifts her chin a fraction and says one offended word; her expression barely changes."
+audio = "mute"
+
+[[shot]]
+n = 21
+dur = 3.4
+set = "throne"
+cast = ["tsarina", "zlata"]
+still = "Medium close-up of the Tsarina standing beside the throne, her face turning from anxiety toward someone off to one side into a slow dawning realization as she looks toward her daughter; in the soft-focus background Zlata sits on the throne examining a ring on her own hand with total disinterest, her chin down."
+motion = "The Tsarina turns her head toward her daughter, studies her for a moment and her expression changes into quiet realization; her mouth moves for a few quiet words. In the background Zlata examines her ring with her mouth closed."
+audio = "mute"
+
+[[shot]]
+n = 22
+dur = 2.6
+set = "door"
+cast = ["witch"]
+still = "Wide shot toward the tall dark arched doorway at the end of the pale throne room: the witch seen from behind turns into the near-blackness, already half-swallowed by shadow, her crooked cane raised mid-step; the empty dark doorway dominates the frame."
+motion = "The witch walks steadily into the darkness until she is gone; the camera holds on the empty doorway."
+audio = "keep"
+sound = "a cane tapping away into silence"
+
+[[shot]]
+n = 23
+dur = 3.2
+set = "throne"
+cast = ["tsarina"]
+still = "Wide symmetrical reveal of the throne room: several maids in dusty-blue and ivory uniforms roll an ornate silver cart into the room bearing an absolutely enormous towering cupcake with elegant white frosting and elaborate ruby-red decorations, nearly as tall as the maids; the Tsarina stands beside it presenting it with exhausted optimism."
+motion = "The maids roll the cart with the enormous cupcake into the centre of the room; the Tsarina gestures toward it with a tired flourish."
+audio = "duck"
+sound = "a heavy cart rolling on marble"
+
+[[shot]]
+n = 24
+dur = 2.6
+set = "throne"
+cast = ["zlata"]
+still = "Close-up of Zlata on the throne, her eyes lowered toward an enormous cupcake off to the side, her head tilted, her face perfectly serious and mildly puzzled, one eyebrow raised a millimetre, the kokoshnik glittering above her."
+motion = "Zlata studies the giant cupcake off to the side and asks one practical question with complete sincerity, her head still."
+audio = "mute"
+
+[[shot]]
+n = 25
+dur = 3.4
+set = "throne"
+cast = ["tsarina"]
+still = "Medium shot of the Tsarina standing beside the ornate silver cart, both hands thrown outward from her body in surrender, her oversized crown shifting slightly on her head, her face at the end of its patience; the enormous white frosted cupcake at the edge of the frame."
+motion = "The Tsarina throws both hands outward and exclaims one exhausted sentence; her crown shifts on her head and she does not fix it."
+audio = "mute"
+
+[[shot]]
+n = 26
+dur = 2.8
+set = "throne"
+cast = []
+still = "Wide shot of the tall palace doors at the end of the throne room swinging open: two servants in livery stand at attention on either side of the doorway, bright window light beyond them, the pale silver hall in the foreground."
+motion = "The tall doors swing open and the two servants snap to attention; the one on the left raises his head and announces loudly, his mouth moving, while the other stands with his mouth closed."
+audio = "mute"
+
+[[shot]]
+n = 27
+dur = 4.2
+set = "throne"
+cast = ["narsissus"]
+still = "Full-length hero shot from a slightly low angle: Prince Narsissus strides into the throne room toward the camera in his fitted deep-blue velvet court suit and tall polished boots, chin up, smiling as though expecting applause; tall windows and crystal chandeliers blur on either side of him."
+motion = "Prince Narsissus strides forward with complete confidence and says one smooth self-satisfied sentence; the camera glides backward before him."
+audio = "mute"
+
+[[shot]]
+n = 28
+dur = 2.0
+set = "throne"
+cast = ["zlata"]
+still = "Close-up of Zlata on the throne, her eyes bright for the first time, her arms uncrossing mid-motion, a tiny interested smile forming on her red lips, the kokoshnik glittering."
+motion = "Zlata's eyes brighten, her arms uncross and a tiny interested smile appears as she lifts her chin."
+audio = "mute"
+
+[[shot]]
+n = 29
+dur = 2.8
+set = "throne"
+cast = ["narsissus"]
+still = "Medium shot: Prince Narsissus notices himself in a tall silver-framed palace mirror and stops mid-stride, his reflection visible at the edge of the frame, his face already softening into a slow smile at himself; the pale silver hall behind."
+motion = "Narsissus stops mid-stride, turns to the mirror, smiles slowly at his reflection and kisses it with complete sincerity."
+audio = "duck"
+sound = "a hushed hall"
+
+[[shot]]
+n = 30
+dur = 3.0
+set = "throne"
+cast = ["zlata"]
+still = "Close-up of Zlata on the throne, her hopeful smile dying instantly, her features closing, her eyes narrowing in distaste, her body starting to lean back from the throne's centre."
+motion = "Zlata's smile vanishes in a blink; she recoils slightly and says two flat decisive words."
+audio = "mute"
+
+[[shot]]
+n = 31
+dur = 3.4
+set = "throne"
+cast = ["zlata", "tsarina", "narsissus"]
+still = "Wide throne-room shot: in the background the tiny real white pony in ruby-red ribbons trots merrily across the pale marble toward the ornate silver cart bearing the enormous cupcake; the maids in dusty-blue and ivory stand in the midground, the Tsarina mid-turn, Prince Narsissus preening near a mirror to one side, and Zlata on the throne at the centre watching it all."
+motion = "The pony trots across the room and bumps the silver cart; the cart starts rolling and the pony ambles on; everyone freezes and stares."
+audio = "keep"
+sound = "pony hooves, a cart rattling into motion"
+
+[[shot]]
+n = 32
+dur = 2.5
+set = "throne"
+cast = []
+still = "Medium shot of the enormous cupcake on its ornate silver cart tipping just enough, a graceful mass of white frosting and ruby-red decorations sliding forward off the top of the cake, the pale marble floor below."
+motion = "The giant cupcake tips and a wave of white frosting slides forward off the cake; the camera holds."
+audio = "keep"
+sound = "a soft heavy slide"
+
+[[shot]]
+n = 33
+dur = 2.5
+set = "throne"
+cast = ["narsissus"]
+still = "Medium close-up of Prince Narsissus facing the camera as an elegant partial splat of white frosting with ruby-red decoration hits one side of his face, hair and velvet shoulder, his composure shattered, his eyes wide."
+motion = "The frosting splats onto Prince Narsissus on one side of his face and shoulder; he stands perfectly still, his eyes widening in fury."
+audio = "keep"
+sound = "an elegant wet splat"
+
+[[shot]]
+n = 34
+dur = 3.0
+set = "throne"
+cast = ["zlata"]
+still = "Close-up of Zlata on the throne, her lips pressed hard together, her cheeks tightening, her eyes bright and shining as she tries desperately not to laugh, her hands gripping the throne's arm."
+motion = "Zlata presses her lips together and her cheeks tighten; her nose gives one small twitch and she fights to hold it in."
+audio = "mute"
+
+[[shot]]
+n = 35
+dur = 1.5
+set = "throne"
+cast = ["narsissus"]
+still = "Close-up of Prince Narsissus standing motionless, glaring straight ahead through white frosting sliding down one side of his face, ruby-red crumbs in his blond hair and on his velvet shoulder, his jaw set in indignation."
+motion = "Narsissus stands perfectly still and glares through the frosting, one strand of it sliding down his cheek."
+audio = "mute"
+
+[[shot]]
+n = 36
+dur = 3.0
+set = "throne"
+cast = ["zlata"]
+still = "Close-up of Zlata on the throne, her shoulders starting to shake, her face crumpling as she cracks into genuine laughter, one hand flying up toward her kokoshnik."
+motion = "Zlata's shoulders shake and she bursts into genuine open-mouthed laughter, throwing her head back."
+audio = "duck"
+sound = "a young woman bursting into real laughter"
+
+[[shot]]
+n = 37
+dur = 3.5
+set = "throne"
+cast = ["tsarina", "narsissus"]
+still = "Medium-wide shot of the throne room: the Tsarina stares at her laughing daughter in disbelief and is only just beginning to soften; around her the maids in dusty-blue and ivory laugh and applaud; at the edge of the frame Prince Narsissus stands indignant under his frosting near the cart."
+motion = "The Tsarina's disbelief softens into laughter; the maids break into laughing and applause; the room comes alive."
+audio = "duck"
+sound = "a room of people laughing and applauding"
+
+[[shot]]
+n = 38
+dur = 5.0
+set = "throne"
+cast = ["zlata", "tsarina", "narsissus"]
+still = "Wide final fairy-tale composition: Zlata settled back at the centre on her silver throne looking extremely pleased with herself, the Tsarina laughing beside the throne, maids in dusty-blue and ivory applauding at either side, the tiny real white pony cropping near the ruined enormous cupcake on its silver cart, and Prince Narsissus standing off to one side indignant under white frosting."
+motion = "The room laughs and applauds around the throne; Zlata settles back and allows herself a pleased smile; the camera very slowly pulls back."
+audio = "duck"
+sound = "laughter and applause in a grand hall"
+
+# ---------------------------------------------------------------- the voice track (reel clock)
+# The screenplay's narrator lines for shot 5 are split at its own "A beat."; the witch's line splits at its beat
+# too. Every line is word-for-word; starts sit on the shot that carries them (kickoff: lines carry their
+# delivery from their shot and the PERFORMANCE NOTES).
+
+[[narration]]
+start = 3.5
+text = "In a very wealthy kingdom lived a very bored princess."
+delivery = "dry and deadpan, savouring the words 'very bored'"
+
+[[narration]]
+start = 8.0
+text = "She had jewels, servants, admirers, and absolutely no gratitude."
+delivery = "brisk on the list, a beat before the last four words, delivered as the punchline"
+
+[[narration]]
+start = 12.8
+text = "The Tsarina had spent twenty years giving Zlata everything she asked for."
+delivery = "measured and dry, a faint whistle of sympathy on 'twenty years'"
+
+[[narration]]
+start = 17.2
+text = "She was starting to regret it."
+delivery = "deadpan, dropped low, almost a whisper of satisfaction"
+
+[[narration]]
+start = 19.5
+text = "Please, darling."
+delivery = "gently, tired and indulgent, always regal even when frazzled"
+who = "tsarina"
+
+[[narration]]
+start = 26.5
+text = "Cute. Next!"
+delivery = "almost emotionless, two flung words, the most bored dismissal imaginable"
+who = "zlata"
+
+[[narration]]
+start = 35.0
+text = "My feet deserve better."
+delivery = "sincere, quiet, absolutely serious, a statement of fact"
+who = "zlata"
+
+[[narration]]
+start = 43.2
+text = "I'm prettier."
+delivery = "a flat factual observation, no boast, just accurate reporting"
+who = "zlata"
+
+[[narration]]
+start = 54.0
+text = "A curse? Please."
+delivery = "low and raspy, utterly unimpressed, the second word a dry rasp"
+who = "witch"
+
+[[narration]]
+start = 55.8
+text = "She needs someone to tell her no!"
+delivery = "conversational and blunt, the last word hard, not a shout"
+who = "witch"
+
+[[narration]]
+start = 58.9
+text = "Rude."
+delivery = "one small offended word, mildly, barely moving her mouth"
+who = "zlata"
+
+[[narration]]
+start = 61.2
+text = "…Perhaps just once."
+delivery = "quietly, to herself, dawning hope creeping into the exhaustion"
+who = "tsarina"
+
+[[narration]]
+start = 70.3
+text = "Is that gluten-free?"
+delivery = "completely sincere and practical, as though asking of a perfectly normal cupcake"
+who = "zlata"
+
+[[narration]]
+start = 73.0
+text = "There is nothing left to bring you!"
+delivery = "elegant even at her most exhausted, an upward crack of surrender, not a scream"
+who = "tsarina"
+
+[[narration]]
+start = 76.2
+text = "His Highness, Prince Narsissus!"
+delivery = "loud and clear, a formal court announcement, drawn out grandly"
+voice = "A man with a loud, clear, formal town-crier voice, bellowing a royal announcement across a hall"
+
+[[narration]]
+start = 79.2
+text = "Try not to fall in love too quickly."
+delivery = "smooth, confident, purring, deeply pleased with himself"
+who = "narsissus"
+
+[[narration]]
+start = 88.0
+text = "Take him back."
+delivery = "immediate and decisive, flat, no drama, a returned parcel"
+who = "zlata"
+
+[[narration]]
+start = 110.5
+text = "Turns out, all she needed was content."
+delivery = "perfectly deadpan, a small satisfied pause before the last word"
+
+# ---------------------------------------------------------------- burned-in overlays (drawn in the cut, never prompted)
+
+[[overlay]]
+text = "TOO MUCH IS NEVER ENOUGH"
+start = 0.3
+end = 3.5
+y = 0.46
+size = 34
+font = "/System/Library/Fonts/Supplemental/Cochin.ttc"
+
+[[overlay]]
+text = "A Spoiled Princess Story"
+start = 1.4
+end = 3.5
+y = 0.545
+size = 24
+font = "/System/Library/Fonts/Supplemental/Cochin.ttc"

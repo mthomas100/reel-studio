@@ -1,0 +1,13 @@
+# Media lives in ~/Videos/reel-studio/<project>/, never here. Weights live in ~/.cache/huggingface.
+*.mp4
+*.mov
+*.wav
+*.png
+*.jpg
+!docs/**/*.jpg
+!docs/**/*.png
+.venv/
+__pycache__/
+*.log
+logs/
+.DS_Store

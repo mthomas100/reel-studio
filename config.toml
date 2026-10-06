@@ -1,0 +1,45 @@
+# reel-studio model choices (2026-10-04). Change a model here, never in bin/reel.
+# Evidence for each choice: docs/models.md (the model scout's report) and the end-to-end test in docs/test-runs.md.
+
+[paths]          # "~" is your home folder; a relative path is relative to this repo
+media = "~/Videos/reel-studio"
+mflux_bin = ".venv/bin"                           # mflux 0.21.0, our own venv (setup.sh), so the film rig's pinned 0.20 is untouched; same HF weights
+vidgen = "../local-video/bin/vidgen"              # LTX-2.5 image-to-video (mthomas100/local-video cloned next to this repo; takes the GPU hold itself)
+voice_python = "../mlx-audio/.venv/bin/python"    # an mlx-audio checkout with its venv (Qwen3-TTS, MiniMax-Music3)
+
+[cast]            # hero reference portraits: tall, so the whole costume reads
+width = 1024
+height = 1536
+
+[t2i]             # text-to-image: hero portraits, set plates, shots with no recurring character
+command = "mflux-generate-qwen-2.1"
+args = []
+
+[edit]            # multi-reference edit: every shot with a recurring character (the image-edit step)
+default = "qwen"  # docs/models.md: Qwen-Image-2.1 edit is #1 open model in the AA editing arena (Elo 1073, 2026-10-04)
+face_ref = true   # add the cast's face close-up (reel views) as a second reference
+
+[edit.profiles.qwen]       # up to 10 references; --verify asks Qwen3-VL whether the edit applied, and retries
+command = "mflux-generate-qwen-2.1-edit"
+args = ["--verify", "--verify-retries", "1"]
+
+[edit.profiles.qwen-turbo] # 6 steps with the Viggle LoRA, for drafts (trained for 1-3 references)
+command = "mflux-generate-qwen-2.1-edit"
+args = ["--steps", "6", "--scheduler", "viggle_turbo"]
+loras = [["~/.cache/huggingface/hub/models--Viggle--Qwen-Image-2.1-viggle-turbo/snapshots/*/Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r256.safetensors", 1.0]]
+
+[edit.profiles.klein]      # FLUX.2 klein 4B: the film rig's proven path, 16 s an edit
+command = "mflux-generate-flux2-edit"
+args = ["--model", "flux2-klein-4b"]
+
+[video]           # image-to-video
+size = "720p"
+min_secs = 3      # the reel's shots are 0.2-3 s; a 3-4 s take gives room for an in-point
+in = 0.4          # default in-point: skip the first frames, which sit pinned to the still
+args = []
+
+[cut]
+duck_db = -14     # clip sound under narration
+
+[music]           # MiniMax-Music3 mxfp8 via mlx-audio (docs/models.md: the music pick; no territory exclusion)
+command = "scripts/music.sh"

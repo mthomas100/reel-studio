@@ -1,0 +1,24 @@
+#!/bin/zsh
+# reel-pi — start pi as the reel director on a LOCAL model (2026-10-04). The pi side of reel-studio, equal to
+# Claude Code's: the same skills (~/.pi/agent/skills/reel-studio, reel-reverse), the same bin/reel commands.
+#
+#   bin/reel-pi [-m qwen38|vision-q4-400k] [--thinking L] [pi flags...] ["first message"]
+#
+# Default model qwen38 (Qwen3.8 Flash Next, vision-capable, pi's default since 2026-10-01). GPU stages take the Mac's
+# hold and unload the model while they run; hold.ts makes pi's next model call wait, then the model reloads.
+set -eu
+here=${0:a:h}; model=qwen38; think=medium; args=()
+rig=${LOCAL_RIG:-$here/../../local-rig}   # local-rig (the GPU hold + pi's model catalog), cloned next to this repo
+while [ $# -gt 0 ]; do
+  case $1 in -m) model=$2; shift 2;; --thinking) think=$2; shift 2;; *) args+=("$1"); shift;; esac
+done
+cd $here/..
+if ! pi --list-models 2>/dev/null | grep -Eq "^local +$model( |$)"; then
+  echo "reel-pi: pi has no local/$model; regenerate the catalog: $rig/tools/gen-pi-models.py" >&2; exit 1
+fi
+holdext=(); [ -f $rig/extensions/hold.ts ] && holdext=(-e $rig/extensions/hold.ts)
+exec pi --offline --approve --no-extensions --no-context-files "${holdext[@]}" \
+  --model local/$model --thinking $think \
+  --append-system-prompt $here/../docs/pi-director.md \
+  --tools read,write,edit,ls,grep,find,bash \
+  "${args[@]}"

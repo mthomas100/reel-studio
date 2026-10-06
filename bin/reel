@@ -1,0 +1,761 @@
+#!/usr/bin/env python3
+"""reel — an image-first AI reel studio on this Mac (2026-10-04).
+
+Inspired by the still-first workflow AI short creators use (image model -> image edit -> image-to-video ->
+music, then a fast cut), rebuilt with local models. It is NOT the film rig in local-video (one long LTX take per
+shot, text-first): here every shot starts as a designed still, the same cast and set references go into every still, each still is animated for a few seconds, and the
+cut, narration and music are laid on afterwards.
+
+  reel init <project>                 new project from the template (projects/<project>/reel.toml)
+  reel lint <project>                 check the project file (durations, references, words) — no GPU
+  reel brief <project>                the beat sheet, one line per shot, for the human's approval (no GPU)
+  reel looktest <project> [--clips]   a test frame per [[look_option]] so the look is picked by eye
+  reel approve <project> brief        record the human's sign-off on the brief
+  reel cast <project> [--only id] [--takes N]     hero reference portraits, one per character (text-to-image)
+  reel views <project> [--only id]               face, three-quarter and profile views of each picked portrait (edit)
+  reel sets <project> [--only id] [--takes N]     empty set plates (text-to-image)
+  reel stills <project> [--shots 1,3-5] [--takes N]   each shot's first frame: an edit of the cast + set references
+  reel animate <project> [--shots ...] [--takes N]    each picked still animated (LTX-2.5 image-to-video, via vidgen)
+  reel voice <project>                narration and voiced lines (Qwen3-TTS VoiceDesign, scripts/voice.py)
+  reel music <project>                the music bed (see config.toml [music])
+  reel animatic <project>             the picked stills cut to the voice track: check pacing before any video
+  reel cut <project> [--compare]      the final reel: picked takes cut to length, title, narration, music
+  reel sheet <project> cast|sets|stills|clips [--shots ...]   a labelled contact sheet to review by eye
+  reel pick <project> <kind> <id> <take>          choose a take (kind: cast, set, still, clip); or: pick <p> look <id>
+  reel status <project>               what exists, what is picked and by whom, the control mode
+  reel gate <project> <stage>         exit 3 if the control mode stops for the human after this stage, else 0
+  reel open <project> <stage>         show the human a stage's result (sheet, animatic, voice, music or cut)
+  reel run <project> [--from stage]   every stage in order, skipping finished work
+
+Every GPU stage runs inside the Mac's GPU hold (`hold run`, from local-rig) when `hold` is installed: it queues
+behind any render, and the local LLM is unloaded only while it runs. Media goes to ~/Videos/reel-studio/<project>/;
+the project file and picks are text in this repo. Model choices live in config.toml, never in this code.
+"""
+from __future__ import annotations
+import argparse, json, os, re, shutil, subprocess, sys, time, tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+# run inside the repo's own venv (setup.sh) when it exists, so `bin/reel` works from any shell
+_VENV = ROOT / ".venv"
+if (_VENV / "bin/python").exists() and Path(sys.prefix).resolve() != _VENV.resolve():
+    os.execv(str(_VENV / "bin/python"), [str(_VENV / "bin/python"), *sys.argv])
+CONFIG = tomllib.loads((ROOT / "config.toml").read_text())
+
+def P(s: str) -> Path:
+    """A config path: ~ expands to the home folder; a relative path is relative to this repo."""
+    p = Path(os.path.expanduser(s))
+    return p if p.is_absolute() else (ROOT / p).resolve()
+
+MEDIA = P(CONFIG["paths"]["media"])
+MFLUX = P(CONFIG["paths"]["mflux_bin"])
+
+# ---------------------------------------------------------------- project
+
+def load(project: str) -> dict:
+    f = ROOT / "projects" / project / "reel.toml"
+    if not f.exists():
+        sys.exit(f"reel: no project file {f} (reel init {project})")
+    p = tomllib.loads(f.read_text())
+    p["_dir"], p["_media"], p["_name"] = f.parent, MEDIA / project, project
+    p.setdefault("cast", []); p.setdefault("set", []); p.setdefault("shot", []); p.setdefault("narration", [])
+    return p
+
+def picks_file(p: dict) -> Path:
+    return p["_dir"] / "picks.json"
+
+def picks(p: dict) -> dict:
+    f = picks_file(p)
+    return json.loads(f.read_text()) if f.exists() else {}
+
+def _take(v) -> int:
+    return int(v["take"]) if isinstance(v, dict) else int(v)
+
+def set_pick(p: dict, kind: str, ident: str, take: int, by: str = "agent") -> None:
+    """Record a pick and who made it. A human's pick is never overwritten by an agent (the control dial, README)."""
+    d = picks(p); cur = d.get(kind, {}).get(str(ident))
+    if by != "human" and isinstance(cur, dict) and cur.get("by") == "human":
+        print(f"  {kind} {ident}: the human picked t{cur['take']}; keeping it (an agent never overrides a human pick)")
+        return
+    d.setdefault(kind, {})[str(ident)] = {"take": int(take), "by": by, "at": time.strftime("%Y-%m-%d %H:%M")}
+    picks_file(p).write_text(json.dumps(d, indent=1, sort_keys=True) + "\n")
+
+def picked(p: dict, kind: str, ident) -> int:
+    v = picks(p).get(kind, {}).get(str(ident))
+    return _take(v) if v is not None else 1
+
+def picked_by(p: dict, kind: str, ident) -> str:
+    v = picks(p).get(kind, {}).get(str(ident))
+    return v.get("by", "agent") if isinstance(v, dict) else ("agent" if v is not None else "default")
+
+def shot_range(spec: str | None, p: dict) -> list[dict]:
+    if not spec:
+        return p["shot"]
+    want = set()
+    for part in spec.split(","):
+        a, _, b = part.partition("-")
+        want.update(range(int(a), int(b or a) + 1))
+    return [s for s in p["shot"] if s["n"] in want]
+
+def size(p: dict) -> tuple[int, int]:
+    return int(p.get("width", 704)), int(p.get("height", 1280))
+
+def path(p: dict, kind: str, ident, take: int) -> Path:
+    sub = {"cast": "cast", "set": "sets", "still": "stills", "clip": "clips"}[kind]
+    ext = "mp4" if kind == "clip" else "png"
+    tag = f"s{int(ident):02d}" if kind in ("still", "clip") else ident
+    return p["_media"] / sub / f"{tag}-t{take}.{ext}"
+
+# ---------------------------------------------------------------- GPU discipline
+
+def hold(reason: str) -> None:
+    """Re-run this command inside the Mac's GPU hold (queues behind renders; unloads the LLM only while held)."""
+    if os.environ.get("HOLD_ID") or not shutil.which("hold") or os.environ.get("REEL_NO_HOLD") == "1":
+        return
+    os.execvp("hold", ["hold", "run", "--kind", "render", "--reason", f"reel {reason}", "--", sys.executable, *sys.argv])
+
+def run(cmd: list[str], log: Path) -> None:
+    log.parent.mkdir(parents=True, exist_ok=True)
+    t = time.time()
+    with open(log, "a") as fh:
+        fh.write(f"\n$ {' '.join(map(str, cmd))}\n"); fh.flush()
+        r = subprocess.run(list(map(str, cmd)), stdout=fh, stderr=subprocess.STDOUT)
+    if r.returncode:
+        sys.exit(f"reel: command failed ({r.returncode}); see {log}")
+    print(f"    done in {time.time() - t:.0f} s")
+
+# ---------------------------------------------------------------- image backends (config.toml [t2i] / [edit])
+
+def t2i(prompt: str, w: int, h: int, seed: int, out: Path, log: Path) -> None:
+    c = CONFIG["t2i"]
+    cmd = [MFLUX / c["command"], *c.get("args", []), "--prompt", prompt, "--width", w, "--height", h, "--seed", seed,
+           "--output", out]
+    if c.get("steps"):
+        cmd += ["--steps", c["steps"]]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    run(cmd, log)
+    out.with_suffix(".txt").write_text(f"t2i {c['command']} seed {seed} {w}x{h}\n{prompt}\n")
+
+EDIT_PROFILE = os.environ.get("REEL_EDIT") or CONFIG["edit"]["default"]
+
+def edit(refs: list[Path], prompt: str, w: int, h: int, seed: int, out: Path, log: Path) -> None:
+    c = CONFIG["edit"]["profiles"][EDIT_PROFILE]
+    cmd = [MFLUX / c["command"], *c.get("args", []), "--image-paths", *refs, "--prompt", prompt, "--width", w,
+           "--height", h, "--seed", seed, "--output", out]
+    if c.get("steps"):
+        cmd += ["--steps", c["steps"]]
+    import glob
+    for lora, scale in c.get("loras", []):
+        found = sorted(glob.glob(os.path.expanduser(lora)))
+        if not found:
+            sys.exit(f"reel: LoRA not downloaded: {lora}")
+        cmd += ["--lora-paths", found[-1], "--lora-scales", scale]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    run(cmd, log)
+    out.with_suffix(".txt").write_text(f"edit [{EDIT_PROFILE}] {c['command']} seed {seed} {w}x{h}\nrefs: {' '.join(map(str, refs))}\n{prompt}\n")
+
+def fit(src: Path, w: int, h: int) -> None:
+    """Centre-crop and resize in place to exactly w x h (the video model wants the clip's own shape)."""
+    from PIL import Image
+    im = Image.open(src).convert("RGB")
+    s = max(w / im.width, h / im.height)
+    im = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
+    l, t = (im.width - w) // 2, (im.height - h) // 2
+    im.crop((l, t, l + w, t + h)).save(src)
+
+# ---------------------------------------------------------------- stages
+
+def style(p: dict, key: str) -> str:
+    """The look sentence for stills ('image') or motion ('video'): the picked [[look_option]] if there is one
+    (reel looktest / reel pick <p> look <id>), else [look]."""
+    chosen = picks(p).get("look", {}).get("choice")
+    if chosen:
+        opt = next((o for o in p.get("look_option", []) if o["id"] == chosen.get("id")), None)
+        if opt and opt.get(key):
+            return opt[key].strip()
+    return p.get("look", {}).get(key, "").strip()
+
+def cmd_cast(p: dict, a) -> None:
+    hold("cast " + p["_name"])
+    w, h = CONFIG["cast"]["width"], CONFIG["cast"]["height"]
+    for c in p["cast"]:
+        if a.only and c["id"] != a.only:
+            continue
+        prompt = c.get("portrait") or (
+            f"Photorealistic full-length character reference portrait, the whole figure from head to shoes in frame, "
+            f"standing facing the camera, soft even light, a plain warm grey backdrop: {c['sentence']}.")
+        prompt = f"{prompt} {style(p, 'image')}".strip()
+        for t in range(1, a.takes + 1):
+            out = path(p, "cast", c["id"], t)
+            if out.exists() and not a.force:
+                print(f"  cast {c['id']} t{t}: exists"); continue
+            print(f"  cast {c['id']} t{t} …")
+            t2i(prompt, w, h, p.get("seed", 1) + 100 * t + sum(map(ord, c["id"])) % 97, out, p["_media"] / "logs/cast.log")
+
+VIEWS = {   # the identity collage still-first creators feed their video model: front, three-quarter, profile, close-up
+    "face": "Close-up head-and-shoulders portrait of the same person, facing the camera straight on, eye level, the whole headdress in frame, a neutral expression, soft even light, a plain warm grey backdrop. Keep the face, hair, makeup, headdress and costume exactly as in image 1.",
+    "three-quarter": "Medium close-up portrait of the same person turned three-quarters to the left, looking past the camera, soft even light, a plain warm grey backdrop. Keep the face, hair, makeup, headdress and costume exactly as in image 1.",
+    "profile": "Medium close-up portrait of the same person in strict left profile, soft even light, a plain warm grey backdrop. Keep the face, hair, makeup, headdress and costume exactly as in image 1.",
+}
+
+def cmd_views(p: dict, a) -> None:
+    """Face, three-quarter and profile views of each picked cast portrait, plus a collage of all four."""
+    from PIL import Image
+    hold("views " + p["_name"])
+    for c in p["cast"]:
+        if a.only and c["id"] != a.only:
+            continue
+        src = path(p, "cast", c["id"], picked(p, "cast", c["id"]))
+        if not src.exists():
+            sys.exit(f"reel: pick a portrait for {c['id']} first ({src} is missing)")
+        outs = []
+        for view, prompt in VIEWS.items():
+            out = src.parent / f"{c['id']}-{view}.png"; outs.append(out)
+            if out.exists() and not a.force:
+                print(f"  {c['id']} {view}: exists"); continue
+            print(f"  {c['id']} {view} …")
+            edit([src], f"{prompt} {c['sentence']}.", 1024, 1024, p.get("seed", 1) + 7, out, p["_media"] / "logs/views.log")
+        tiles = [Image.open(src).convert("RGB")] + [Image.open(o).convert("RGB") for o in outs]
+        hgt = 1024
+        tiles = [t.resize((round(t.width * hgt / t.height), hgt)) for t in tiles]
+        col = Image.new("RGB", (sum(t.width for t in tiles), hgt), "white"); x = 0
+        for t in tiles:
+            col.paste(t, (x, 0)); x += t.width
+        col.save(src.parent / f"{c['id']}-views.png")
+        print(f"  {c['id']}: collage {src.parent / (c['id'] + '-views.png')}")
+
+def cast_refs(p: dict, ident: str) -> list[Path]:
+    """The reference images one character contributes to a still: the picked portrait (whole costume), plus the
+    face close-up when `reel views` has made it (config.toml [edit] face_ref)."""
+    port = path(p, "cast", ident, picked(p, "cast", ident))
+    face = port.parent / f"{ident}-face.png"
+    return [port] + ([face] if CONFIG["edit"].get("face_ref", True) and face.exists() else [])
+
+def cmd_sets(p: dict, a) -> None:
+    hold("sets " + p["_name"])
+    w, h = size(p)
+    for s in p["set"]:
+        if a.only and s["id"] != a.only:
+            continue
+        prompt = f"{s['prompt']} No people. {style(p, 'image')}".strip()
+        for t in range(1, a.takes + 1):
+            out = path(p, "set", s["id"], t)
+            if out.exists() and not a.force:
+                print(f"  set {s['id']} t{t}: exists"); continue
+            print(f"  set {s['id']} t{t} …")
+            t2i(prompt, w * 2, h * 2, p.get("seed", 1) + 200 * t, out, p["_media"] / "logs/sets.log")
+
+def still_prompt(p: dict, s: dict, refs: list[tuple[str, str]]) -> str:
+    """The shot's edit prompt: first what each reference image is, in the "Picture N:" form Qwen-Image-Edit was
+    trained on (docs/craft.md), then the shot itself, then what must not change, then the look."""
+    pics, keep = [], []
+    for i, (kind, ident) in enumerate(refs, 1):
+        if kind == "set":
+            pics.append(f"Picture {i}: the place.")
+            keep.append(f"Keep the architecture, materials and light of the place in Picture {i}.")
+        else:
+            c = next(c for c in p["cast"] if c["id"] == ident)
+            name = c["sentence"].split(",")[0]
+            if kind == "cast-face":
+                pics.append(f"Picture {i}: a close-up of {name}'s face.")
+            else:
+                pics.append(f"Picture {i}: {name}.")
+                keep.append(f"{name} keeps exactly the face, hair, makeup, headdress and costume of Picture {i}"
+                            + (f" and the face of Picture {i + 1}." if i < len(refs) and refs[i] == ("cast-face", ident) else "."))
+    return " ".join([*pics, "Make this shot:", s["still"].strip(), *keep, style(p, "image")]).strip()
+
+def cmd_stills(p: dict, a) -> None:
+    hold("stills " + p["_name"])
+    w, h = size(p)
+    for s in shot_range(a.shots, p):
+        refs: list[tuple[str, str]] = []
+        if s.get("set") and s.get("use_set", True):
+            refs.append(("set", s["set"]))
+        files = [path(p, "set", s["set"], picked(p, "set", s["set"]))] if refs else []
+        for c in s.get("cast", []):
+            for f in cast_refs(p, c):
+                refs.append(("cast-face" if f.name.endswith("-face.png") else "cast", c)); files.append(f)
+        missing = [str(f) for f in files if not f.exists()]
+        if missing:
+            sys.exit(f"reel: shot {s['n']} needs {', '.join(missing)} (run cast/sets and pick)")
+        for t in range(a.first_take, a.first_take + a.takes):
+            out = path(p, "still", s["n"], t)
+            if out.exists() and not a.force:
+                print(f"  still {s['n']} t{t}: exists"); continue
+            seed = p.get("seed", 1) + 1000 * t + s["n"]
+            print(f"  still {s['n']} t{t} ({'edit of ' + str(len(files)) + ' refs' if files else 'text'}) …")
+            if files and s.get("cast"):
+                edit(files, still_prompt(p, s, refs), w, h, seed, out, p["_media"] / "logs/stills.log")
+            else:
+                t2i(f"{s['still'].strip()} {style(p, 'image')}".strip(), w, h, seed, out, p["_media"] / "logs/stills.log")
+            fit(out, w, h)
+
+def cmd_animate(p: dict, a) -> None:
+    hold("animate " + p["_name"])
+    v = CONFIG["video"]
+    for s in shot_range(a.shots, p):
+        still = path(p, "still", s["n"], picked(p, "still", s["n"]))
+        if not still.exists():
+            sys.exit(f"reel: shot {s['n']} has no still {still}")
+        secs = s.get("secs", max(v["min_secs"], round(s.get("in", v["in"]) + s["dur"] + 0.5)))
+        prompt = " ".join([s["motion"].strip(), style(p, "video"),
+                           f"Sound: {s['sound']}" if s.get("sound") else ""]).strip()
+        for t in range(a.first_take, a.first_take + a.takes):
+            out = path(p, "clip", s["n"], t)
+            if out.exists() and not a.force:
+                print(f"  clip {s['n']} t{t}: exists"); continue
+            out.parent.mkdir(parents=True, exist_ok=True)
+            print(f"  clip {s['n']} t{t} ({secs} s) …")
+            run([P(CONFIG["paths"]["vidgen"]), "-i", still, "--seconds", secs, "--size", v["size"], "--portrait",
+                 "--seed", p.get("seed", 1) + 10 * t + s["n"], "--no-open", *v.get("args", []), "-o", out, prompt],
+                p["_media"] / "logs/animate.log")
+
+def cmd_voice(p: dict, a) -> None:
+    hold("voice " + p["_name"])
+    out = p["_media"] / "audio"
+    out.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for ln in p["narration"]:              # `who` = a cast id: that character's one voice, so a voice changes in one place
+        ln = dict(ln)
+        if ln.get("who"):
+            c = next((c for c in p["cast"] if c["id"] == ln["who"]), None)
+            if not c or not c.get("voice"):
+                sys.exit(f"reel: narration line at {ln['start']} names who = '{ln['who']}', who has no [[cast]] voice")
+            ln["voice"] = c["voice"]
+        lines.append(ln)
+    spec = {"lang": p.get("language", "english"), "persona": p.get("narrator", {}).get("voice", ""),
+            "lines": lines, "out": str(out), "seed": p.get("seed", 7),
+            "length": sum(s["dur"] for s in p["shot"])}
+    (out / "voice-spec.json").write_text(json.dumps(spec, ensure_ascii=False, indent=1))
+    run([P(CONFIG["paths"]["voice_python"]), ROOT / "scripts/voice.py", out / "voice-spec.json"],
+        p["_media"] / "logs/voice.log")
+
+def cmd_music(p: dict, a) -> None:
+    m = p.get("music", {})
+    out = p["_media"] / "audio/music.wav"
+    if m.get("file"):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", P(m["file"]), "-ar", "48000", "-ac", "2", out], check=True)
+        print(f"  music: copied {m['file']}"); return
+    c = CONFIG.get("music", {})
+    if not c.get("command"):
+        sys.exit("reel: no music model configured (config.toml [music]); set [music] file = ... in the project")
+    hold("music " + p["_name"])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [P(c["command"]), *c.get("args", []), "--prompt", m.get("prompt", ""), "--seconds",
+           m.get("seconds", 62), "--seed", p.get("seed", 1), "--output", out]
+    if m.get("lyrics"):
+        cmd += ["--lyrics", m["lyrics"]]
+    run(cmd, p["_media"] / "logs/music.log")
+
+# ---------------------------------------------------------------- the cut
+
+def title_png(text: str, w: int, h: int, out: Path, spec: dict, full: str | None = None) -> None:
+    """White centred text on transparency. `full` is the whole text, so a typewriter frame keeps each line's
+    final position (the letters appear in place, the line does not re-centre as it grows)."""
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    font = ImageFont.truetype(spec.get("font", "/System/Library/Fonts/Supplemental/Times New Roman.ttf"),
+                              int(spec.get("size", 44)))
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    lines, full_lines = text.split("\n"), (full or text).split("\n")
+    y = int(h * spec.get("y", 0.5))
+    for i, ln in enumerate(lines):
+        tw = d.textlength(full_lines[i] if i < len(full_lines) else ln, font=font)
+        d.text(((w - tw) / 2, y), ln, font=font, fill=(255, 255, 255, 235))
+        y += int(font.size * 1.25)
+    shadow = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    shadow.paste((0, 0, 0, 150), mask=im.split()[3])
+    shadow = shadow.filter(ImageFilter.GaussianBlur(4))
+    Image.alpha_composite(shadow, im).save(out)
+
+def mean_rgb(video: Path, start: float = 0.0, secs: float | None = None) -> "list[float]":
+    import numpy as np
+    cmd = ["ffmpeg", "-v", "error", "-ss", f"{start:.2f}", "-i", str(video)] + (["-t", f"{secs:.2f}"] if secs else [])
+    raw = subprocess.run(cmd + ["-vf", "fps=2,scale=64:-2,format=rgb24", "-f", "rawvideo", "-"],
+                         capture_output=True).stdout
+    a = np.frombuffer(raw, np.uint8).reshape(-1, 3).astype(float)
+    return list(a.mean(0))
+
+def colour_gains(clips: list, ref: Path, ins: list) -> tuple:
+    """Gains that move the average colour of the picked takes onto the reference's (the cut's grade starts here)."""
+    import numpy as np
+    ours = np.mean([mean_rgb(c, i, 1.5) for c, i in zip(clips, ins)], axis=0)
+    theirs = np.array(mean_rgb(ref))
+    return tuple(np.clip(theirs / np.maximum(ours, 1), 0.6, 1.4))
+
+def cmd_animatic(p: dict, a) -> None:
+    """The picked stills held for each shot's length, with titles, narration and music: check the pacing before
+    spending GPU time on video (docs/craft.md). Writes cut/<project>-animatic.mp4. CPU only."""
+    w, h = size(p); fps = int(p.get("fps", 24))
+    tmp = p["_media"] / "cut/animatic-clips"; tmp.mkdir(parents=True, exist_ok=True)
+    for s in p["shot"]:
+        still = path(p, "still", s["n"], picked(p, "still", s["n"]))
+        if not still.exists():
+            sys.exit(f"reel: shot {s['n']} has no still {still}")
+        out = tmp / f"s{s['n']:02d}.mp4"
+        secs = s.get("in", CONFIG["video"]["in"]) + s["dur"] + 0.5
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-loop", "1", "-i", str(still), "-f", "lavfi", "-i",
+                        "anullsrc=r=48000:cl=stereo", "-t", f"{secs:.2f}", "-vf",
+                        f"scale={w}:{h},zoompan=z='1+0.0008*on':d=1:s={w}x{h}:fps={fps}", "-c:v", "libx264",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(out)], check=True)
+    cmd_cut(p, a, clips=lambda s: tmp / f"s{s['n']:02d}.mp4", name=f"{p['_name']}-animatic")
+
+def cmd_cut(p: dict, a, clips=None, name: str | None = None) -> None:
+    w, h = size(p); fps = int(p.get("fps", 24)); duck = CONFIG["cut"]["duck_db"]
+    cut = p["_media"] / "cut"; cut.mkdir(parents=True, exist_ok=True)
+    rows, t = [], 0.0
+    for s in p["shot"]:
+        clip = clips(s) if clips else path(p, "clip", s["n"], picked(p, "clip", s["n"]))
+        if not clip.exists():
+            sys.exit(f"reel: shot {s['n']} has no clip {clip}")
+        d = (round((t + s["dur"]) * fps) - round(t * fps)) / fps     # cut on the film's clock, not per shot
+        rows.append((s, clip, s.get("in", CONFIG["video"]["in"]), d)); t += d
+    inputs, ch, cat = [], [], ""
+    for i, (s, clip, inn, d) in enumerate(rows):
+        inputs += ["-ss", f"{inn:.3f}", "-t", f"{d + 0.1:.3f}", "-i", str(clip)]
+        ch.append(f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},setsar=1,"
+                  f"trim=end_frame={round(d * fps)},setpts=PTS-STARTPTS[v{i}]")
+        g = {"keep": "0dB", "duck": f"{duck}dB", "mute": "-120dB"}[s.get("audio", "duck")]
+        # timestamps reset BEFORE the trim, and the trim counted in samples: after -ss the audio starts at a slightly
+        # negative timestamp, and atrim=duration lost 0.09 s on 11 of 25 shots - a second by the end, which cut off
+        # the narrator's last words (2026-10-05)
+        ch.append(f"[{i}:a]asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,volume={g},apad,"
+                  f"atrim=end_sample={round(d * 48000)},asetpts=PTS-STARTPTS,"
+                  f"afade=t=in:d=0.02,afade=t=out:st={max(0, d - 0.04):.3f}:d=0.04[a{i}]")
+        cat += f"[v{i}][a{i}]"
+    n = len(rows)
+    ch.append(f"{cat}concat=n={n}:v=1:a=1[vc][ac]")
+    vlast, k = "vc", n
+    for j, ti in enumerate(p.get("overlay", [])):          # titles: PNG overlays (this ffmpeg has no drawtext)
+        text = ti.get("text_ru") if p.get("language") == "russian" and ti.get("text_ru") else ti["text"]
+        text = text.replace("\\n", "\n")
+        if ti.get("typewriter"):                            # letters appear one by one (a typewriter reveal)
+            seq = cut / f"title-{j}"; seq.mkdir(exist_ok=True)
+            for old_png in seq.glob("*.png"):
+                old_png.unlink()
+            nf = round((ti["end"] - ti["start"]) * fps); chars = len(text.replace("\n", ""))
+            for f in range(nf):
+                shown = min(chars, int(chars * (f / fps) / ti["typewriter"]) + 1)
+                part, cnt = "", 0
+                for ch_ in text:
+                    if ch_ != "\n":
+                        if cnt >= shown: break
+                        cnt += 1
+                    part += ch_
+                title_png(part, w, h, seq / f"{f:04d}.png", ti, full=text)
+            inputs += ["-framerate", str(fps), "-i", str(seq / "%04d.png")]
+            ch.append(f"[{k}:v]setpts=PTS+{ti['start']}/TB[tt{j}];[{vlast}][tt{j}]overlay=0:0:eof_action=pass:"
+                      f"enable='between(t,{ti['start']},{ti['end']})'[vt{j}]")
+        else:
+            png = cut / f"title-{j}.png"; title_png(text, w, h, png, ti)
+            inputs += ["-i", str(png)]
+            ch.append(f"[{vlast}][{k}:v]overlay=0:0:enable='between(t,{ti['start']},{ti['end']})'[vt{j}]")
+        vlast, k = f"vt{j}", k + 1
+    g = p.get("grade", {})
+    if g:   # one global grade and grain pass, so small colour differences between generations disappear
+        parts = []
+        ref = p.get("reference")
+        if g.get("match_reference") and ref and P(ref).exists():
+            # per-channel gains that move our picked takes' average colour onto the reference's (2026-10-05:
+            # hand-tuned curves overshot to R/B 1.45 against the reference's 1.31)
+            gains = colour_gains([r[1] for r in rows], P(ref), [r[2] for r in rows])
+            parts.append("colorchannelmixer=rr={:.3f}:gg={:.3f}:bb={:.3f}".format(*gains))
+            print(f"  colour match to the reference: gains R {gains[0]:.3f} G {gains[1]:.3f} B {gains[2]:.3f}")
+        if g.get("eq"): parts.append(f"eq={g['eq']}")
+        if g.get("curves"): parts.append(f"curves={g['curves']}")
+        if g.get("grain"): parts.append(f"noise=alls={int(g['grain'])}:allf=t")
+        if g.get("vignette"): parts.append("vignette=PI/5")
+        if parts:
+            ch.append(f"[{vlast}]{','.join(parts)}[vg]"); vlast = "vg"
+    mix = ["[ac]"]
+    narr = p["_media"] / "audio/narration.wav"
+    if narr.exists():
+        inputs += ["-i", str(narr)]; ch.append(f"[{k}:a]aresample=48000,aformat=channel_layouts=stereo[nar]"); mix.append("[nar]"); k += 1
+    music = p["_media"] / "audio/music.wav"
+    if music.exists():
+        g = p.get("music", {}).get("gain_db", -16)
+        inputs += ["-i", str(music)]
+        ch.append(f"[{k}:a]aresample=48000,aformat=channel_layouts=stereo,volume={g}dB,afade=t=out:st={max(0, t - 1.5):.2f}:d=1.5[mus]")
+        mix.append("[mus]"); k += 1
+    lufs = p.get("loudness", -14)    # Instagram / TikTok play at about -14 LUFS (2026-10-05: the first cut was -19.7)
+    if "[nar]" in mix:
+        # sidechain ducking: the takes' own sound and the music dip whenever the narrator speaks, as an editor does
+        # (2026-10-05: LTX chatter under the last two shots buried the narrator's punchline)
+        bed = [m for m in mix if m != "[nar]"]
+        ch.append(f"{''.join(bed)}amix=inputs={len(bed)}:duration=first:normalize=0[bed];[nar]asplit=2[nk][nv];"
+                  f"[bed][nk]sidechaincompress=threshold=0.015:ratio=10:attack=15:release=350:makeup=1[bedd];"
+                  f"[bedd][nv]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95,"
+                  f"loudnorm=I={lufs}:TP=-1.5:LRA=11,aresample=48000[aout]")
+    else:
+        ch.append(f"{''.join(mix)}amix=inputs={len(mix)}:duration=first:normalize=0,alimiter=limit=0.95,"
+                  f"loudnorm=I={lufs}:TP=-1.5:LRA=11,aresample=48000[aout]")
+    out = cut / f"{name or p['_name']}.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex", ";".join(ch), "-map", f"[{vlast}]",
+                    "-map", "[aout]", "-c:v", "libx264", "-crf", "17", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                    "-b:a", "192k", "-movflags", "+faststart", str(out)], check=True)
+    print(f"  wrote {out} ({t:.2f} s, {n} shots)")
+    ref = p.get("reference")
+    if a.compare and ref and P(ref).exists():
+        cmp = cut / f"{p['_name']}-vs-reference.mp4"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(P(ref)), "-i", str(out), "-filter_complex",
+                        f"[0:v]scale={w}:-2,crop={w}:{h}[l];[1:v]scale={w}:{h}[r];[l][r]hstack[v]", "-map", "[v]",
+                        "-map", "1:a", "-shortest", "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p",
+                        "-c:a", "aac", str(cmp)], check=True)
+        print(f"  wrote {cmp} (left: the reference, right: this reel)")
+
+# ---------------------------------------------------------------- review helpers
+
+def cmd_sheet(p: dict, a) -> None:
+    from PIL import Image, ImageDraw, ImageFont
+    font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 22)
+    tiles = []
+    if a.kind in ("cast", "sets"):
+        kind = "cast" if a.kind == "cast" else "set"
+        for x in (p["cast"] if kind == "cast" else p["set"]):
+            for f in sorted((p["_media"] / ("cast" if kind == "cast" else "sets")).glob(f"{x['id']}-t*.png")):
+                if not re.fullmatch(re.escape(x["id"]) + r"-t\d+\.png", f.name):
+                    continue
+                tiles.append((Image.open(f).convert("RGB"), f.stem))
+    else:
+        kind = "still" if a.kind == "stills" else "clip"
+        for s in shot_range(a.shots, p):
+            for f in sorted((p["_media"] / ("stills" if kind == "still" else "clips")).glob(f"s{s['n']:02d}-t*.{'png' if kind == 'still' else 'mp4'}")):
+                if kind == "still":
+                    tiles.append((Image.open(f).convert("RGB"), f.stem))
+                else:
+                    dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
+                                                "csv=p=0", str(f)], capture_output=True, text=True).stdout or 1)
+                    for q in (0.15, 0.5, 0.85):
+                        png = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{dur * q:.2f}", "-i", str(f), "-frames:v", "1",
+                                              "-f", "image2pipe", "-vcodec", "png", "-"], capture_output=True).stdout
+                        import io
+                        tiles.append((Image.open(io.BytesIO(png)).convert("RGB"), f"{f.stem} @{dur * q:.1f}s"))
+    if not tiles:
+        sys.exit("reel: nothing to show")
+    tw = 300; cols = int(a.cols)
+    th = int(tw * tiles[0][0].height / tiles[0][0].width)
+    sheet = Image.new("RGB", (cols * (tw + 6), ((len(tiles) + cols - 1) // cols) * (th + 6)), "white")
+    for i, (im, label) in enumerate(tiles):
+        im = im.resize((tw, th)); d = ImageDraw.Draw(im)
+        d.rectangle((0, th - 32, tw, th), fill="black"); d.text((6, th - 30), label, font=font, fill="yellow")
+        sheet.paste(im, ((i % cols) * (tw + 6), (i // cols) * (th + 6)))
+    out = p["_media"] / "sheets" / f"{a.kind}{'-' + a.shots if a.shots else ''}.jpg"
+    out.parent.mkdir(parents=True, exist_ok=True); sheet.save(out, quality=85)
+    print(out)
+
+def cmd_brief(p: dict, a) -> None:
+    """The beat sheet: one line per shot (time, length, place, who, what we see, what is said), for the human's
+    approval before any GPU time is spent (intake, skills/reel-studio/references/intake.md). Writes
+    projects/<p>/beat-sheet.md too. CPU only."""
+    lines_at = sorted(p["narration"], key=lambda x: float(x["start"]))
+    out, t = [f"# {p.get('title', p['_name'])} - beat sheet", "",
+              f"{len(p['shot'])} shots, {sum(s['dur'] for s in p['shot']):.1f} s, {p.get('width', 704)}x{p.get('height', 1280)}, "
+              f"language {p.get('language', 'english')}, control {control(p)['mode']}", "",
+              "| # | at | len | shot | place | who | what we see | heard |", "|---|---|---|---|---|---|---|---|"], 0.0
+    for s in p["shot"]:
+        said = [f"{'NARRATOR' if not ln.get('who') else ln['who']}: \"{ln['text']}\"" for ln in lines_at
+                if t - 0.3 <= float(ln["start"]) < t + s["dur"] - 0.3]
+        still = s["still"].strip()
+        head, sep, rest = still.partition(":")
+        framing, see = (head.split(",")[0], rest.strip()) if sep and len(head) < 160 else ("-", still)
+        see = see if len(see) <= 150 else see[:147].rsplit(" ", 1)[0] + "..."
+        out.append(f"| {s['n']} | {t:.1f} | {s['dur']:.1f} | {framing} | {s.get('set', '-')} | "
+                   f"{', '.join(s.get('cast', [])) or '-'} | {see} | {' / '.join(said)} |")
+        t += s["dur"]
+    for o in p.get("overlay", []):
+        out.append(f"\nTitle {o['start']}-{o['end']} s: \"{o['text']}\"")
+    if p.get("music", {}).get("prompt"):
+        out.append(f"\nMusic: {p['music']['prompt']}")
+    f = p["_dir"] / "beat-sheet.md"; f.write_text("\n".join(out) + "\n")
+    print("\n".join(out)); print(f"\n(also written to {f})")
+
+def cmd_looktest(p: dict, a) -> None:
+    """One test frame per [[look_option]] (and with --clips a 2 s clip of it): the lead in the main set under each
+    candidate look, so the human picks a look by eye before anything else is drawn (intake step 3)."""
+    opts = p.get("look_option", [])
+    if not opts:
+        sys.exit("reel: no [[look_option]] in the project (id, name, image, video); write 2-4 of them first")
+    hold("looktest " + p["_name"])
+    w, h = size(p)
+    lead = p["cast"][0]["sentence"] if p["cast"] else ""
+    place = p["set"][0]["prompt"] if p["set"] else ""
+    subject = p.get("look_test", f"{place} {lead}, looking into the lens.")
+    for o in opts:
+        out = p["_media"] / "looks" / f"{o['id']}.png"
+        if out.exists() and not a.force:
+            print(f"  look {o['id']}: exists"); continue
+        print(f"  look {o['id']} ({o.get('name', '')}) …")
+        t2i(f"{subject} {o['image']}", w, h, p.get("seed", 1), out, p["_media"] / "logs/looks.log")
+        if a.clips:
+            run([P(CONFIG["paths"]["vidgen"]), "-i", out, "--seconds", 2, "--size", "480p", "--portrait",
+                 "--seed", p.get("seed", 1), "--no-open", "-o", out.with_suffix(".mp4"),
+                 f"She breathes and blinks; the candle flames flicker. {o.get('video', '')}"], p["_media"] / "logs/looks.log")
+
+def cmd_approve(p: dict, a) -> None:
+    """Record the human's sign-off on a stage that has no take to pick (the brief): reel approve <p> brief."""
+    stage = a.rest[0] if a.rest else ""
+    by = a.by or ("agent" if os.environ.get("REEL_AGENT") or not sys.stdin.isatty() else "human")
+    set_pick(p, "approved", stage, 1, by)
+    print(f"  {stage}: approved ({picked_by(p, 'approved', stage)})")
+
+def cmd_status(p: dict, a) -> None:
+    def have(kind, ident):
+        first = path(p, kind, ident, 1)   # count numbered takes only (not <id>-three-quarter.png and the other views)
+        takes = [f for f in first.parent.glob(first.name.replace("-t1.", "-t*."))
+                 if re.fullmatch(re.escape(first.name.split("-t1.")[0]) + r"-t\d+\." + first.suffix[1:], f.name)]
+        pk = picked(p, kind, ident)
+        return (f"{len(takes)} take(s), pick t{pk} ({picked_by(p, kind, ident)})"
+                f"{'' if path(p, kind, ident, pk).exists() else ' MISSING'}") if takes else "-"
+    c = control(p)
+    print(f"{p.get('title', p['_name'])}: {len(p['shot'])} shots, {sum(s['dur'] for s in p['shot']):.2f} s, media {p['_media']}")
+    print(f"  control: {c['mode']}" + (f", stops for the human at: {', '.join(c['gates'])}" if c['gates'] else ", no stops"))
+    ap = picks(p).get("approved", {}); lk = picks(p).get("look", {}).get("choice")
+    print(f"  brief: {'approved by ' + ap['brief'].get('by', '?') if isinstance(ap.get('brief'), dict) else 'not approved (reel brief, then reel approve)'}")
+    if p.get("look_option"):
+        print(f"  look: {('picked ' + lk['id'] + ' (' + lk.get('by', '?') + ')') if lk else 'not picked (reel looktest, then reel pick <p> look <id>)'}"
+              f" of {', '.join(o['id'] for o in p['look_option'])}")
+    for c in p["cast"]: print(f"  cast {c['id']:<14} {have('cast', c['id'])}")
+    for s in p["set"]: print(f"  set  {s['id']:<14} {have('set', s['id'])}")
+    for s in p["shot"]:
+        print(f"  shot {s['n']:>2} {s['dur']:5.2f}s  still: {have('still', s['n']):<22} clip: {have('clip', s['n'])}")
+    for f in ("audio/narration.wav", "audio/music.wav", f"cut/{p['_name']}.mp4"):
+        print(f"  {f:<22} {'yes' if (p['_media'] / f).exists() else '-'}")
+
+def cmd_lint(p: dict, a) -> None:
+    probs = []
+    ids_c = {c["id"] for c in p["cast"]}; ids_s = {s["id"] for s in p["set"]}
+    for c in p["cast"]:
+        if len(c.get("sentence", "").split(",")) < 4:
+            probs.append(f"cast {c['id']}: the sentence needs a name and at least three fixed traits")
+    for s in p["shot"]:
+        for c in s.get("cast", []):
+            if c not in ids_c: probs.append(f"shot {s['n']}: unknown cast '{c}'")
+        if s.get("set") and s["set"] not in ids_s: probs.append(f"shot {s['n']}: unknown set '{s['set']}'")
+        if not s.get("still") or not s.get("motion"): probs.append(f"shot {s['n']}: needs both still and motion")
+        if re.search(r"\b(film grain|35mm|anamorphic|\d+ ?mm lens)\b", s.get("still", "") + s.get("motion", ""), re.I):
+            probs.append(f"shot {s['n']}: format/lens words draw borders and masks (local-video prompt-rules.md)")
+        if re.search(r"\bcut to\b", s.get("motion", ""), re.I):
+            probs.append(f"shot {s['n']}: 'cut to' inside a clip makes a real cut; one take per shot")
+    total = sum(s["dur"] for s in p["shot"])
+    print(f"{len(p['shot'])} shots, {total:.2f} s; {len(p['narration'])} narration lines; "
+          f"{len(probs)} problem(s)")
+    for x in probs: print("  -", x)
+    sys.exit(1 if probs else 0)
+
+def cmd_pick(p: dict, a) -> None:
+    if a.kind == "look":   # reel pick <p> look <option id>  (the take argument is optional)
+        if not any(o["id"] == a.ident for o in p.get("look_option", [])):
+            sys.exit(f"reel: no [[look_option]] with id '{a.ident}'")
+        by = a.by or ("agent" if os.environ.get("REEL_AGENT") or not sys.stdin.isatty() else "human")
+        d = picks(p); cur = d.get("look", {}).get("choice")
+        if by != "human" and cur and cur.get("by") == "human":
+            print(f"  look: the human picked {cur['id']}; keeping it"); return
+        d.setdefault("look", {})["choice"] = {"id": a.ident, "by": by, "at": time.strftime("%Y-%m-%d %H:%M")}
+        picks_file(p).write_text(json.dumps(d, indent=1, sort_keys=True) + "\n")
+        print(f"  look -> {a.ident} ({by})"); return
+    # typed at a terminal = the human; run by an agent's tool (no TTY) = an agent, unless --by says otherwise
+    by = a.by or ("agent" if os.environ.get("REEL_AGENT") or not sys.stdin.isatty() else "human")
+    set_pick(p, a.kind, a.ident, int(a.take), by); print(f"  {a.kind} {a.ident} -> t{picked(p, a.kind, a.ident)} ({picked_by(p, a.kind, a.ident)})")
+
+def cmd_init(project: str) -> None:
+    d = ROOT / "projects" / project
+    if d.exists():
+        sys.exit(f"reel: {d} exists")
+    d.mkdir(parents=True)
+    shutil.copy(ROOT / "docs/reel-template.toml", d / "reel.toml")
+    print(f"  wrote {d / 'reel.toml'}")
+
+MODES = {   # the control dial (README "Who decides"): which stages stop for the human before the next stage runs
+    "drive":       [],
+    "checkpoints": ["brief", "look", "cast", "stills", "animatic", "cut"],
+    "hands-on":    ["brief", "look", "cast", "views", "sets", "stills", "voice", "music", "animatic", "animate", "cut"],
+}
+
+def control(p: dict) -> dict:
+    c = p.get("control", {})
+    mode = c.get("mode", "checkpoints")
+    if mode not in MODES:
+        sys.exit(f"reel: [control] mode must be one of {', '.join(MODES)}")
+    return {"mode": mode, "gates": c.get("gates", MODES[mode])}
+
+def cmd_gate(p: dict, a) -> None:
+    """Exit 0 = go on; exit 3 = stop: show the human this stage's sheet and wait for their word."""
+    stage = a.rest[0] if a.rest else ""
+    c = control(p)
+    if stage in c["gates"]:
+        print(f"STOP: '{stage}' is a checkpoint in {c['mode']} mode. Show the human (reel open {p['_name']} {stage}),"
+              f" propose your picks, and wait for their go-ahead or their own picks (reel pick ... --by human).")
+        sys.exit(3)
+    print(f"GO: '{stage}' is not a checkpoint in {c['mode']} mode; pick by your own review and carry on.")
+
+def cmd_open(p: dict, a) -> None:
+    """Put a stage's result in front of the human: a contact sheet, the animatic or the cut, opened on screen."""
+    kind = a.rest[0] if a.rest else "cut"
+    media = p["_media"]
+    if kind in ("cast", "views", "sets", "stills", "clips", "animate"):
+        a.kind = {"views": "cast", "animate": "clips"}.get(kind, kind); a.cols = a.cols or 6
+        import contextlib, io as _io
+        buf = _io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cmd_sheet(p, a)
+        target = Path(buf.getvalue().strip().splitlines()[-1])
+    elif kind in ("look", "looks"):
+        from PIL import Image
+        files = sorted((media / "looks").glob("*.png"))
+        if not files:
+            sys.exit("reel: no look tests yet (reel looktest)")
+        ims = [Image.open(f).convert("RGB").resize((360, 640)) for f in files]
+        sheet = Image.new("RGB", (len(ims) * 366, 640), "white")
+        for i, im in enumerate(ims):
+            sheet.paste(im, (i * 366, 0))
+        target = media / "sheets/looks.jpg"; target.parent.mkdir(parents=True, exist_ok=True); sheet.save(target, quality=88)
+        print("  left to right:", ", ".join(f.stem for f in files))
+    elif kind == "brief":
+        target = p["_dir"] / "beat-sheet.md"
+        if not target.exists():
+            sys.exit("reel: no beat sheet yet (reel brief)")
+    elif kind == "animatic":
+        target = media / f"cut/{p['_name']}-animatic.mp4"
+    elif kind in ("voice", "music"):
+        target = media / f"audio/{'narration' if kind == 'voice' else 'music'}.wav"
+    else:
+        cmp = media / f"cut/{p['_name']}-vs-reference.mp4"
+        target = cmp if cmp.exists() else media / f"cut/{p['_name']}.mp4"
+    if not target.exists():
+        sys.exit(f"reel: nothing to open yet ({target})")
+    subprocess.run(["open", str(target)]); print(target)
+
+STAGES = ["cast", "views", "sets", "stills", "animate", "voice", "music", "cut"]
+
+def main() -> None:
+    ap = argparse.ArgumentParser(prog="reel", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd"); ap.add_argument("project"); ap.add_argument("rest", nargs="*")
+    ap.add_argument("--only"); ap.add_argument("--shots"); ap.add_argument("--takes", type=int, default=1)
+    ap.add_argument("--force", action="store_true"); ap.add_argument("--compare", action="store_true")
+    ap.add_argument("--edit", help="edit profile from config.toml [edit.profiles] (default: [edit] default)")
+    ap.add_argument("--first-take", type=int, default=1, help="number new takes from here (A/B runs side by side)")
+    ap.add_argument("--clips", action="store_true", help="looktest: also a 2 s clip per look")
+    ap.add_argument("--by", choices=["human", "agent"], help="pick: who is choosing (default human, or agent when REEL_AGENT=1)")
+    ap.add_argument("--cols", default=6); ap.add_argument("--from", dest="start", default="cast")
+    a = ap.parse_args()
+    if a.edit:
+        os.environ["REEL_EDIT"] = a.edit; globals()["EDIT_PROFILE"] = a.edit
+    if a.cmd == "init":
+        return cmd_init(a.project)
+    p = load(a.project)
+    if a.cmd == "sheet":
+        a.kind = a.rest[0] if a.rest else "stills"; return cmd_sheet(p, a)
+    if a.cmd == "pick":
+        a.kind, a.ident, a.take = (a.rest + ["1"])[:3]; return cmd_pick(p, a)
+    if a.cmd == "run":
+        for st in STAGES[STAGES.index(a.start):]:
+            print(f"== {st}"); globals()[f"cmd_{st}"](p, a)
+        return
+    fn = globals().get(f"cmd_{a.cmd}")
+    if not fn:
+        sys.exit(f"reel: unknown command {a.cmd}")
+    fn(p, a)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""reverse — take a reference reel apart into evidence an agent can read (2026-10-04).
+
+For studying a reference video (shot rhythm, voice, music, look). CPU only: it never touches the GPU, so it can run
+beside a render.
+
+  reverse <video> <outdir> [--start S] [--end E] [--crop W:H:X:Y] [--lang ru|en|auto] [--threshold 8]
+
+  1. reel.mp4      the reel alone: trimmed to [start, end] (a screen recording often starts mid-reel and loops),
+                   cropped (e.g. drop a phone's comment bar), 30 fps, audio kept
+  2. dense/        6 frames a second, named by time in ms (t04333.jpg = 4.333 s)
+  3. cuts.tsv      scene-score cuts (ffmpeg scdet); shots.tsv the candidate shots between them
+  4. shots/        per shot: a 6-frame time-stamped strip and the middle frame at full size; sheet-NN.jpg = 4 strips
+  5. audio/        Demucs vocals / music stems, whisper transcript (transcript.srt), per-line median pitch
+                   (voices.tsv: tells a deep narrator from a shrieking lead), music tempo and key (music.json)
+
+A looping screen recording: find the loop by matching cut times (two cut lists offset by the reel length), then rerun
+with --start/--end and stitch the pieces in order.
+Needs: ffmpeg, whisper-cli + ~/.cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin, and a Python with Demucs, parselmouth,
+librosa, numpy and Pillow (local-video's sync venv, ~/.cache/local-video/sync-venv, or set REVERSE_PYTHON).
+"""
+from __future__ import annotations
+import argparse, io, json, os, re, subprocess, sys
+from pathlib import Path
+# re-run under the Python that has Demucs and librosa (REVERSE_PYTHON, else local-video's sync venv) when it exists
+_PY = Path(os.environ.get("REVERSE_PYTHON") or Path.home() / ".cache/local-video/sync-venv/bin/python")
+if _PY.exists() and Path(sys.prefix).resolve() != _PY.parent.parent.resolve():
+    os.execv(str(_PY), [str(_PY), *sys.argv])
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
+WHISPER_MODEL = Path.home() / ".cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin"
+FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+
+def sh(*cmd, **kw):
+    return subprocess.run([str(c) for c in cmd], check=True, **kw)
+
+def frame(video: Path, t: float, width: int) -> Image.Image:
+    png = sh("ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", video, "-frames:v", "1", "-vf", f"scale={width}:-2",
+             "-f", "image2pipe", "-vcodec", "png", "-", capture_output=True).stdout
+    return Image.open(io.BytesIO(png)).convert("RGB")
+
+def label(im: Image.Image, text: str, font) -> Image.Image:
+    d = ImageDraw.Draw(im); y = im.height - 34
+    x0, y0, x1, y1 = d.textbbox((8, y), text, font=font)
+    d.rectangle((x0 - 4, y0 - 4, x1 + 4, y1 + 4), fill="black"); d.text((8, y), text, font=font, fill="yellow")
+    return im
+
+def main() -> int:
+    ap = argparse.ArgumentParser(); ap.add_argument("video"); ap.add_argument("outdir")
+    ap.add_argument("--start", type=float, default=0); ap.add_argument("--end", type=float)
+    ap.add_argument("--crop"); ap.add_argument("--lang", default="auto"); ap.add_argument("--threshold", type=float, default=8)
+    a = ap.parse_args()
+    src, out = Path(a.video).expanduser(), Path(a.outdir).expanduser()
+    for d in ("dense", "shots", "audio"):
+        (out / d).mkdir(parents=True, exist_ok=True)
+    font = ImageFont.truetype(FONT, 22)
+
+    # 1. the reel alone
+    vf = ",".join(x for x in (f"crop={a.crop}" if a.crop else "", "fps=30") if x)
+    trim = ["-ss", str(a.start)] + (["-to", str(a.end)] if a.end else [])
+    reel = out / "reel.mp4"
+    sh("ffmpeg", "-v", "error", "-y", *trim, "-i", src, "-vf", vf, "-c:v", "libx264", "-crf", "16", "-pix_fmt", "yuv420p",
+       "-c:a", "aac", "-b:a", "192k", reel)
+    dur = float(sh("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", reel,
+                   capture_output=True, text=True).stdout)
+
+    # 2. dense frames
+    for f in (out / "dense").glob("*.jpg"):
+        f.unlink()
+    sh("ffmpeg", "-v", "error", "-y", "-i", reel, "-vf", "fps=6,scale=540:-2", "-q:v", "3", out / "dense/f%04d.jpg")
+    for i, f in enumerate(sorted((out / "dense").glob("f*.jpg"))):
+        f.rename(out / f"dense/t{i * 1000 // 6:05d}.jpg")
+
+    # 3. cuts
+    log = subprocess.run(["ffmpeg", "-v", "info", "-i", str(reel), "-vf", f"scale=360:-2,scdet=threshold={a.threshold}:sc_pass=1",
+                          "-f", "null", "-"], capture_output=True, text=True).stderr
+    cuts = [(float(t), float(s)) for s, t in re.findall(r"lavfi\.scd\.score: ([0-9.]+), lavfi\.scd\.time: ([0-9.]+)", log)]
+    (out / "cuts.tsv").write_text("".join(f"{t:.3f}\t{s:.2f}\n" for t, s in cuts))
+    bounds = [0.0] + [t for t, _ in cuts if t > 0.2] + [dur]
+    shots = [(i + 1, bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1) if bounds[i + 1] - bounds[i] > 0.05]
+    (out / "shots.tsv").write_text("".join(f"{n}\t{s:.3f}\t{e:.3f}\tcandidate\n" for n, s, e in shots))
+
+    # 4. strips and sheets
+    strips = []
+    for n, s, e in shots:
+        k = 6 if e - s >= 1.5 else 4 if e - s >= 0.6 else 2
+        tiles = [label(frame(reel, t, 240), f"{t:.2f}", font) for t in
+                 (s + 0.05 + (e - s - 0.1) * i / (k - 1) for i in range(k))]
+        st = Image.new("RGB", (180 + sum(t.width + 4 for t in tiles), tiles[0].height), "white")
+        d = ImageDraw.Draw(st)
+        for j, txt in enumerate((f"S{n:02d}", f"{s:.2f}-", f"{e:.2f}", f"{e - s:.2f}s")):
+            d.text((6, 10 + 28 * j), txt, font=font, fill="black")
+        x = 180
+        for t in tiles:
+            st.paste(t, (x, 0)); x += t.width + 4
+        st.save(out / f"shots/s{n:02d}-strip.jpg", quality=85); strips.append(st)
+        label(frame(reel, (s + e) / 2, 1080), f"S{n:02d} {(s + e) / 2:.2f}s", font).save(out / f"shots/s{n:02d}-key.jpg", quality=88)
+    for k in range(0, len(strips), 4):
+        g = strips[k:k + 4]
+        sheet = Image.new("RGB", (max(x.width for x in g), sum(x.height + 8 for x in g)), "white"); y = 0
+        for x in g:
+            sheet.paste(x, (0, y)); y += x.height + 8
+        sheet.save(out / f"shots/sheet-{k // 4 + 1:02d}.jpg", quality=85)
+
+    # 5. audio: stems, transcript, voices, music
+    wav = out / "audio/mix.wav"
+    sh("ffmpeg", "-v", "error", "-y", "-i", reel, "-vn", "-c:a", "pcm_s16le", wav)
+    sh(sys.executable, "-m", "demucs", "--two-stems=vocals", "-d", "cpu", "-o", out / "audio/stems", wav, capture_output=True)
+    stem = out / "audio/stems/htdemucs/mix"
+    v16 = out / "audio/vocals16k.wav"
+    sh("ffmpeg", "-v", "error", "-y", "-i", stem / "vocals.wav", "-ac", "1", "-ar", "16000", v16)
+    lines = []
+    if WHISPER_MODEL.exists():
+        sh("whisper-cli", "-ng", "-t", "8", "-m", WHISPER_MODEL, "-l", a.lang, "-f", v16, "-osrt", "-of",
+           out / "audio/transcript", capture_output=True)
+        srt = (out / "audio/transcript.srt").read_text()
+        for m in re.finditer(r"(\d+):(\d+):(\d+),(\d+) --> (\d+):(\d+):(\d+),(\d+)\n(.+)", srt):
+            g = list(map(int, m.groups()[:8]))
+            lines.append((g[0] * 3600 + g[1] * 60 + g[2] + g[3] / 1000, g[4] * 3600 + g[5] * 60 + g[6] + g[7] / 1000,
+                          m.group(9).strip()))
+    import parselmouth, librosa
+    snd = parselmouth.Sound(str(stem / "vocals.wav")); rows = []
+    for s, e, text in lines:
+        f = snd.extract_part(s, e).to_pitch(pitch_floor=60, pitch_ceiling=600).selected_array["frequency"]; f = f[f > 0]
+        rows.append(f"{s:.2f}\t{e:.2f}\t{np.median(f) if len(f) else 0:.0f}\t{text}\n")
+    (out / "audio/voices.tsv").write_text("# start\tend\tmedian_f0_hz\ttext  (~85 Hz deep bass, ~120 male, ~150-250 female, 400+ shriek)\n" + "".join(rows))
+    y, sr = librosa.load(str(stem / "no_vocals.wav"), sr=22050, mono=True)
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr).mean(axis=1)
+    names = "C C# D D# E F F# G G# A A# B".split()
+    maj = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+    mnr = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+    keys = sorted([(float(np.corrcoef(np.roll(maj, i), chroma)[0, 1]), names[i] + " major") for i in range(12)] +
+                  [(float(np.corrcoef(np.roll(mnr, i), chroma)[0, 1]), names[i] + " minor") for i in range(12)], reverse=True)
+    (out / "audio/music.json").write_text(json.dumps({"tempo_bpm": float(np.atleast_1d(tempo)[0]), "key_guesses": keys[:3],
+                                                      "note": "tempo and key are estimates; instruments are not identified"}, indent=1))
+    med = float(np.median([e - s for _, s, e in shots])) if shots else 0
+    print(f"reel {dur:.2f} s, {len(shots)} candidate shots (median {med:.2f} s), {len(lines)} transcript lines -> {out}")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
