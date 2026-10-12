@@ -1,5 +1,5 @@
 # reel-studio model choices (2026-10-04). Change a model here, never in bin/reel.
-# Evidence for each choice: docs/models.md (the model scout's report) and the end-to-end test in docs/test-runs.md.
+# Evidence for each choice: docs/models.md (why each model) and the measurements in docs/results.md.
 
 [paths]          # "~" is your home folder; a relative path is relative to this repo
 media = "~/Videos/reel-studio"

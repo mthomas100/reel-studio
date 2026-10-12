@@ -1,8 +1,8 @@
 # Which local model runs each stage (M5 Max, 128 GB, chosen 2026-10-04)
 
-The model scout's choices for each stage of the still-first workflow, run fully locally on Apple Silicon. Arena
+The model chosen for each stage of the still-first workflow, run fully locally on Apple Silicon. Arena
 numbers are Artificial Analysis (AA) leaderboards read on 2026-10-04; "measured" means measured on this Mac
-(`docs/test-runs.md`); anything else is marked as an estimate or a vendor claim. Change a model in `config.toml`,
+(`docs/results.md`); anything else is marked as an estimate or a vendor claim. Change a model in `config.toml`,
 never in `bin/reel`.
 
 ## The stack

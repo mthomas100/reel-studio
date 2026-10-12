@@ -1,11 +1,13 @@
-# pi smoke test (run with the GPU free: pi's own model has to load)
+# pi smoke test
+
+A quick check that pi on a local vision model can drive `bin/reel` the way Claude Code does, without starting any
+GPU stage. Run it with the GPU free (pi's own model has to load):
 
     bin/reel-pi -p "$(cat docs/pi-smoke-test.md | sed -n '/^PROMPT/,$p' | tail -n +2)"
 
 Pass: pi loads the skill, runs status and gate, makes a sheet, reads it with its own vision, gives a reasoned
 choice, records it with `bin/reel pick` (picks.json shows "by": "agent" for still 12), and starts no GPU stage.
-It needs a project whose stills 11-13 exist; the prompt below uses `too-much`. (The recorded pass, 2026-10-05 01:04,
-ran on the private test project; see docs/test-runs.md.)
+It needs a project whose stills 11-13 exist; the prompt below uses `too-much`. Measured result: docs/results.md.
 
 PROMPT
 Load the reel-studio skill. Project: too-much. Do NOT run any GPU stage (no cast, views, sets, stills, animate,

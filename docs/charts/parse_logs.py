@@ -1,9 +1,15 @@
-"""Parse a run's mflux stage logs into per-image timings (CPU only). Usage: python parse_logs.py"""
-import re, sys, json
+"""Parse a run's mflux stage logs into per-image timings (CPU only).
+
+Usage: python parse_logs.py [LOGS_DIR]
+LOGS_DIR is the project's media logs folder; default $REEL_LOGS, else ~/Videos/reel-studio/too-much/logs.
+"""
+import os, re, sys, json
 from pathlib import Path
+logs = Path(sys.argv[1] if len(sys.argv) > 1 else
+            os.environ.get("REEL_LOGS", "~/Videos/reel-studio/too-much/logs")).expanduser()
 rows = []
 for stage in ["cast", "views", "sets", "stills"]:
-    txt = (Path.home() / f"Videos/reel-studio/too-much/logs/{stage}.log").read_text(errors="replace")
+    txt = (logs / f"{stage}.log").read_text(errors="replace")
     for blk in txt.split("\n$ ")[1:]:
         cmd = blk.split("\n", 1)[0]
         body = blk.split("\n", 1)[1] if "\n" in blk else ""

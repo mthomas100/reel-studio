@@ -1,7 +1,7 @@
-# Too Much Is Never Enough — a spoiled-princess fairy-tale comedy reel from the human's own screenplay
-# (projects/too-much/screenplay.md). Drive mode, start to finish, no re-shoots this round (kickoff.md).
+# Too Much Is Never Enough — a spoiled-princess fairy-tale comedy reel from the author's own screenplay
+# (projects/too-much/screenplay.md). Drive mode, start to finish, one render per stage (no re-shoots).
 # Times are the reel's own clock. Where the screenplay gave one shot more than one take can hold (shot 32's
-# rapid payoff), it is split into consecutive shots 32-38; see NOTES.md.
+# rapid payoff), it is split into consecutive shots 32-38, so the reel runs ~115 s instead of 92.
 
 title = "Too Much Is Never Enough"
 width = 704
@@ -11,7 +11,7 @@ seed = 7777
 language = "english"
 
 [control]
-mode = "drive"     # the human handed the whole reel over (kickoff.md, 2026-10-05); no gates
+mode = "drive"     # the agent makes every pick; no gates
 
 [narrator]
 voice = "A man of about sixty with a dry crisp British RP voice, low and measured, perfectly deadpan and faintly sarcastic, every sentence delivered like a raised eyebrow"
@@ -67,7 +67,8 @@ prompt = "Photorealistic interior of the far end of a pale silver fairy-tale thr
 
 # ---------------------------------------------------------------- shots
 # The screenplay's shot 32 (a rapid payoff sequence with cuts inside it) is split into shots 32-38; shot 6 is
-# lengthened so the two narrator sentences and the Tsarina's line fit without overlap. Timings: NOTES.md.
+# lengthened (2.2 -> 4.0 s) so the two narrator sentences and the Tsarina's line fit without overlap; shots 12,
+# 19 and 24-27 got small increases so no line overruns its shot.
 
 [[shot]]
 n = 1
@@ -431,8 +432,8 @@ sound = "laughter and applause in a grand hall"
 
 # ---------------------------------------------------------------- the voice track (reel clock)
 # The screenplay's narrator lines for shot 5 are split at its own "A beat."; the witch's line splits at its beat
-# too. Every line is word-for-word; starts sit on the shot that carries them (kickoff: lines carry their
-# delivery from their shot and the PERFORMANCE NOTES).
+# too. Every line is word-for-word; starts sit on the shot that carries them, and each line takes its delivery
+# from its shot and the screenplay's PERFORMANCE NOTES.
 
 [[narration]]
 start = 3.5

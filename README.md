@@ -194,7 +194,7 @@ flowchart LR
 
 | mode | where the human picks | where the agent picks |
 |---|---|---|
-| `drive` | nowhere during the run; any pick can be overturned afterwards with one `reel pick` and a re-cut | every stage, from its own reading of the contact sheets, one NOTES.md line per decision |
+| `drive` | nowhere during the run; any pick can be overturned afterwards with one `reel pick` and a re-cut | every stage, from its own reading of the contact sheets, with one line per decision in `projects/<p>/NOTES.md` |
 | `checkpoints` | brief, look, cast, stills, animatic, cut (`gates = [...]` changes the list) | views, sets, voice, music, animate |
 | `hands-on` | every stage | nothing; it prepares the options and carries out the human's choices |
 
@@ -224,7 +224,7 @@ mflux 0.21.0, 40 steps. Model load time not included; in-flight images excluded.
 - **The edit verifier is the biggest time cost.** Qwen3-VL failed **20 of 41** shot edits (and 2 of 12 identity
   views), and each failure re-runs the edit, doubling that still's time. It did not catch the doubled-person
   failures above.
-- **First end-to-end test** (a private 25-shot, 61 s test project, 2026-10-04/05; `docs/test-runs.md`):
+- **First end-to-end test** (a private 25-shot, 61 s test project, 2026-10-04/05; details in `docs/results.md`):
   - about 3 h 15 min of GPU time from the first portrait to the first cut, plus ~25 min of redos;
   - **22 of 25 stills and 20 of 25 clips kept on the first pass**;
   - LTX-2.5 clips took a mean of 111 s (73 s for a 3 s clip, 366 s for 10 s);
